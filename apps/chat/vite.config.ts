@@ -11,6 +11,7 @@ export default {
   resolve: {
     alias: {
       "#": path.resolve(repoDir, "src"),
+      "@tanstack/ai-solid/ui": path.resolve(repoDir, "src/lib/solid-ui-bridge.tsx"),
     },
   },
   define: buildInfoDefines(import.meta.url),

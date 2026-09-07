@@ -8,6 +8,7 @@ import {
   handleChatBackupDownload,
   handleChatBackupRestore,
 } from "../api/backups";
+import { handleChat } from "../api/chat";
 import { handleSync } from "../api/sync";
 import { handleUploadBlobPut, handleUploadBlobGet } from "../api/uploads-blob";
 import { BUILD_INFO } from "../lib/build-info";
@@ -111,6 +112,10 @@ export function createRouter(env: RawEnv) {
 
           if (pathname === "/api/session" && method === "GET") {
             return withVersionHeader(await auth.sessionEndpoint(request));
+          }
+
+          if (pathname === "/api/chat" || pathname.startsWith("/api/chat")) {
+            return withVersionHeader(await handleChat(request));
           }
 
           if (pathname.startsWith("/api/sync/")) {

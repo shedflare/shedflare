@@ -15,7 +15,8 @@
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
     "paths": {
-      "#/*": ["./src/*"]
+      "#/*": ["./src/*"],
+      "@tanstack/ai-solid/ui": ["./src/lib/solid-ui-bridge.tsx"]
     }
   },
   "include": [

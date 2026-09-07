@@ -40,9 +40,11 @@
     "@solidjs/meta": "^0.29.4",
     "@solidjs/router": "^0.15.4",
     "@tanstack/ai": "catalog:",
+    "@tanstack/ai-client": "catalog:",
     "@tanstack/ai-compaction": "catalog:",
     "@tanstack/ai-openai": "catalog:",
     "@tanstack/ai-persistence": "catalog:",
+    "@tanstack/ai-solid": "catalog:",
     "@tanstack/db": "catalog:",
     "@tanstack/solid-db": "catalog:",
     "@valibot/to-json-schema": "catalog:",
@@ -55,7 +57,8 @@
     "marked-highlight": "catalog:",
     "openai": "catalog:",
     "solid-js": "^1.9.12",
-    "valibot": "catalog:"
+    "valibot": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "catalog:",

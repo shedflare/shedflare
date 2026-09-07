@@ -443,6 +443,7 @@ export async function runAssistantTurn(payload: AssistantTurnPayload, ctx: Assis
       const adapter = createOpenCodeAdapter({
         env: ctx.env,
         modelId,
+        sessionId: payload.threadId,
         trace: (name, kind, attrs, run) => traceAsync(name, kind, attrs, run),
       });
       const providerOptions = await traceSync(

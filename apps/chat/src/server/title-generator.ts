@@ -57,7 +57,7 @@ export async function generateThreadTitle(
 
   try {
     const generated = await chat({
-      adapter: createOpenCodeAdapter({ env: ctx.env, modelId }),
+      adapter: createOpenCodeAdapter({ env: ctx.env, modelId, sessionId: input.threadId }),
       stream: false,
       systemPrompts: [systemPrompt],
       messages: [{ role: "user", content: promptText }],

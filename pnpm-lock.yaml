@@ -30,6 +30,9 @@ catalogs:
     '@tanstack/ai':
       specifier: 0.52.0
       version: 0.52.0
+    '@tanstack/ai-client':
+      specifier: 0.29.2
+      version: 0.29.2
     '@tanstack/ai-compaction':
       specifier: 0.1.0
       version: 0.1.0
@@ -39,6 +42,9 @@ catalogs:
     '@tanstack/ai-persistence':
       specifier: 0.5.4
       version: 0.5.4
+    '@tanstack/ai-solid':
+      specifier: 0.19.4
+      version: 0.19.4
     '@tanstack/db':
       specifier: ^0.6.5
       version: 0.6.7
@@ -120,6 +126,9 @@ catalogs:
     wrangler:
       specifier: ^4.83.0
       version: 4.98.0
+    zod:
+      specifier: ^3.25.0
+      version: 3.25.76
 
 overrides:
   drizzle-kit: 1.0.0-rc.4
@@ -163,7 +172,7 @@ importers:
         version: 3.3.1
       oxlint:
         specifier: 'catalog:'
-        version: 1.79.0(vite-plus@0.1.24(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(esbuild@0.28.1)(jiti@2.7.0)(jsdom@29.1.1)(typescript@6.0.3)(yaml@2.9.0))
+        version: 1.79.0(oxlint-tsgolint@0.23.0)(vite-plus@0.1.24(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(esbuild@0.28.1)(jiti@2.7.0)(jsdom@29.1.1)(typescript@6.0.3)(yaml@2.9.0))
       playwright:
         specifier: 'catalog:'
         version: 1.60.0
@@ -215,7 +224,7 @@ importers:
         version: 7.0.0-dev.20260421.2
       alchemy:
         specifier: 'catalog:'
-        version: 2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.1)
+        version: 2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260603.1)(ws@8.21.1)
       drizzle-kit:
         specifier: 1.0.0-rc.4
         version: 1.0.0-rc.4
@@ -361,16 +370,22 @@ importers:
         version: 0.15.4(solid-js@1.9.13)
       '@tanstack/ai':
         specifier: 'catalog:'
-        version: 0.52.0(zod@4.4.3)
+        version: 0.52.0(zod@3.25.76)
+      '@tanstack/ai-client':
+        specifier: 'catalog:'
+        version: 0.29.2(zod@3.25.76)
       '@tanstack/ai-compaction':
         specifier: 'catalog:'
-        version: 0.1.0(@tanstack/ai@0.52.0(zod@4.4.3))
+        version: 0.1.0(@tanstack/ai@0.52.0(zod@3.25.76))
       '@tanstack/ai-openai':
         specifier: 'catalog:'
-        version: 0.22.3(@aws-sdk/credential-provider-node@3.972.51)(@smithy/signature-v4@5.4.6)(@tanstack/ai@0.52.0(zod@4.4.3))(ws@8.21.1)(zod@4.4.3)
+        version: 0.22.3(@aws-sdk/credential-provider-node@3.972.51)(@smithy/signature-v4@5.4.6)(@tanstack/ai@0.52.0(zod@3.25.76))(ws@8.21.1)(zod@3.25.76)
       '@tanstack/ai-persistence':
         specifier: 'catalog:'
-        version: 0.5.4(@tanstack/ai@0.52.0(zod@4.4.3))(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))
+        version: 0.5.4(@tanstack/ai@0.52.0(zod@3.25.76))(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))
+      '@tanstack/ai-solid':
+        specifier: 'catalog:'
+        version: 0.19.4(@tanstack/ai@0.52.0(zod@3.25.76))(solid-js@1.9.13)(zod@3.25.76)
       '@tanstack/db':
         specifier: 'catalog:'
         version: 0.6.7(typescript@6.0.3)
@@ -385,7 +400,7 @@ importers:
         version: 3.4.8
       drizzle-orm:
         specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3)
+        version: 1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@3.25.76)
       effect:
         specifier: 'catalog:'
         version: 4.0.0-beta.92
@@ -403,13 +418,16 @@ importers:
         version: 2.2.4(marked@17.0.6)
       openai:
         specifier: 'catalog:'
-        version: 6.49.0(@aws-sdk/credential-provider-node@3.972.51)(@smithy/signature-v4@5.4.6)(ws@8.21.1)(zod@4.4.3)
+        version: 6.49.0(@aws-sdk/credential-provider-node@3.972.51)(@smithy/signature-v4@5.4.6)(ws@8.21.1)(zod@3.25.76)
       solid-js:
         specifier: ^1.9.12
         version: 1.9.13
       valibot:
         specifier: 'catalog:'
         version: 1.4.2(typescript@6.0.3)
+      zod:
+        specifier: 'catalog:'
+        version: 3.25.76
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: 'catalog:'
@@ -428,7 +446,7 @@ importers:
         version: 7.0.0-dev.20260421.2
       alchemy:
         specifier: 'catalog:'
-        version: 2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260603.1)(ws@8.21.1)
+        version: 2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@3.25.76))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.1)
       drizzle-kit:
         specifier: 1.0.0-rc.4
         version: 1.0.0-rc.4
@@ -3396,6 +3414,9 @@ packages:
   '@stitches/stringify@1.2.8':
     resolution: {integrity: sha512-juDrnCsfBlckOu0pFOCzEN8iX6oIbLS7vFlrqXwG0Y6yzS6EnOtbP4NGNtB7XzyF9u82jLoCDq1EmBwsgBssqQ==}
 
+  '@tanstack/ai-client@0.29.2':
+    resolution: {integrity: sha512-SciysncXh5R5MHQ1GoF3kHfaygRFljUO1yVRvH97elR5l7Xjx9VYVB0KLnW7g11SIwxUrpODlLynlxEJSL2USg==}
+
   '@tanstack/ai-compaction@0.1.0':
     resolution: {integrity: sha512-uw63y19w+h3+e5AZX0qZTIM75FIeiNsZZfA4VsBtyQnkUBCjw6+FMj+Tg57K8z90VWwTdb/G9F36AefVh2ItYA==}
     peerDependencies:
@@ -3417,6 +3438,12 @@ packages:
     peerDependenciesMeta:
       vitest:
         optional: true
+
+  '@tanstack/ai-solid@0.19.4':
+    resolution: {integrity: sha512-dtemsdqbycf1CgXO8oJW9WycujbR/ZKsuFU1KdmZ7kHb1o2udvPoLuC8Ui6psnTsVWikkRC7sZ1g0nR+nAnNCQ==}
+    peerDependencies:
+      '@tanstack/ai': ^0.52.0
+      solid-js: '>=1.9.10'
 
   '@tanstack/ai-utils@0.4.0':
     resolution: {integrity: sha512-xqvAgPJkIuGk1m+jZKyb7vBTQIaBmUD9EVzlPkDWWMp80n69uwL0TnBZCVk+OwL9goTQiFy648dnBfLsiJgl6A==}
@@ -6152,14 +6179,17 @@ packages:
   youch@4.1.0-beta.10:
     resolution: {integrity: sha512-rLfVLB4FgQneDr0dv1oddCVZmKjcJ6yX6mS4pU82Mq/Dt9a3cLZQ62pDBL4AUO+uVrCvtWz3ZFUL2HFAFJ/BXQ==}
 
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+
   zod@4.4.3:
     resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
 snapshots:
 
-  '@ag-ui/core@0.1.1-canary.beta.0(zod@4.4.3)':
+  '@ag-ui/core@0.1.1-canary.beta.0(zod@3.25.76)':
     optionalDependencies:
-      zod: 4.4.3
+      zod: 3.25.76
 
   '@alcalzone/ansi-tokenize@0.2.5':
     dependencies:
@@ -7968,20 +7998,29 @@ snapshots:
 
   '@stitches/stringify@1.2.8': {}
 
-  '@tanstack/ai-compaction@0.1.0(@tanstack/ai@0.52.0(zod@4.4.3))':
+  '@tanstack/ai-client@0.29.2(zod@3.25.76)':
     dependencies:
-      '@tanstack/ai': 0.52.0(zod@4.4.3)
+      '@tanstack/ai': 0.52.0(zod@3.25.76)
+      '@tanstack/ai-event-client': 0.11.2
+      '@tanstack/ai-utils': 0.4.0
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+      - zod
+
+  '@tanstack/ai-compaction@0.1.0(@tanstack/ai@0.52.0(zod@3.25.76))':
+    dependencies:
+      '@tanstack/ai': 0.52.0(zod@3.25.76)
 
   '@tanstack/ai-event-client@0.11.2':
     dependencies:
       '@tanstack/devtools-event-client': 0.4.3
 
-  '@tanstack/ai-openai@0.22.3(@aws-sdk/credential-provider-node@3.972.51)(@smithy/signature-v4@5.4.6)(@tanstack/ai@0.52.0(zod@4.4.3))(ws@8.21.1)(zod@4.4.3)':
+  '@tanstack/ai-openai@0.22.3(@aws-sdk/credential-provider-node@3.972.51)(@smithy/signature-v4@5.4.6)(@tanstack/ai@0.52.0(zod@3.25.76))(ws@8.21.1)(zod@3.25.76)':
     dependencies:
-      '@tanstack/ai': 0.52.0(zod@4.4.3)
+      '@tanstack/ai': 0.52.0(zod@3.25.76)
       '@tanstack/ai-utils': 0.4.0
-      '@tanstack/openai-base': 0.10.8(@aws-sdk/credential-provider-node@3.972.51)(@smithy/signature-v4@5.4.6)(@tanstack/ai@0.52.0(zod@4.4.3))(ws@8.21.1)(zod@4.4.3)
-      openai: 6.49.0(@aws-sdk/credential-provider-node@3.972.51)(@smithy/signature-v4@5.4.6)(ws@8.21.1)(zod@4.4.3)
+      '@tanstack/openai-base': 0.10.8(@aws-sdk/credential-provider-node@3.972.51)(@smithy/signature-v4@5.4.6)(@tanstack/ai@0.52.0(zod@3.25.76))(ws@8.21.1)(zod@3.25.76)
+      openai: 6.49.0(@aws-sdk/credential-provider-node@3.972.51)(@smithy/signature-v4@5.4.6)(ws@8.21.1)(zod@3.25.76)
     transitivePeerDependencies:
       - '@aws-sdk/credential-provider-node'
       - '@smithy/hash-node'
@@ -7989,18 +8028,27 @@ snapshots:
       - ws
       - zod
 
-  '@tanstack/ai-persistence@0.5.4(@tanstack/ai@0.52.0(zod@4.4.3))(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))':
+  '@tanstack/ai-persistence@0.5.4(@tanstack/ai@0.52.0(zod@3.25.76))(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))':
     dependencies:
-      '@tanstack/ai': 0.52.0(zod@4.4.3)
+      '@tanstack/ai': 0.52.0(zod@3.25.76)
       '@tanstack/ai-utils': 0.4.0
     optionalDependencies:
       vitest: 4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1)
 
+  '@tanstack/ai-solid@0.19.4(@tanstack/ai@0.52.0(zod@3.25.76))(solid-js@1.9.13)(zod@3.25.76)':
+    dependencies:
+      '@tanstack/ai': 0.52.0(zod@3.25.76)
+      '@tanstack/ai-client': 0.29.2(zod@3.25.76)
+      solid-js: 1.9.13
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+      - zod
+
   '@tanstack/ai-utils@0.4.0': {}
 
-  '@tanstack/ai@0.52.0(zod@4.4.3)':
+  '@tanstack/ai@0.52.0(zod@3.25.76)':
     dependencies:
-      '@ag-ui/core': 0.1.1-canary.beta.0(zod@4.4.3)
+      '@ag-ui/core': 0.1.1-canary.beta.0(zod@3.25.76)
       '@standard-schema/spec': 1.1.0
       '@tanstack/ai-event-client': 0.11.2
       '@tanstack/ai-utils': 0.4.0
@@ -8033,11 +8081,11 @@ snapshots:
     dependencies:
       '@tanstack/store': 0.11.0
 
-  '@tanstack/openai-base@0.10.8(@aws-sdk/credential-provider-node@3.972.51)(@smithy/signature-v4@5.4.6)(@tanstack/ai@0.52.0(zod@4.4.3))(ws@8.21.1)(zod@4.4.3)':
+  '@tanstack/openai-base@0.10.8(@aws-sdk/credential-provider-node@3.972.51)(@smithy/signature-v4@5.4.6)(@tanstack/ai@0.52.0(zod@3.25.76))(ws@8.21.1)(zod@3.25.76)':
     dependencies:
-      '@tanstack/ai': 0.52.0(zod@4.4.3)
+      '@tanstack/ai': 0.52.0(zod@3.25.76)
       '@tanstack/ai-utils': 0.4.0
-      openai: 6.49.0(@aws-sdk/credential-provider-node@3.972.51)(@smithy/signature-v4@5.4.6)(ws@8.21.1)(zod@4.4.3)
+      openai: 6.49.0(@aws-sdk/credential-provider-node@3.972.51)(@smithy/signature-v4@5.4.6)(ws@8.21.1)(zod@3.25.76)
     transitivePeerDependencies:
       - '@aws-sdk/credential-provider-node'
       - '@smithy/hash-node'
@@ -8567,7 +8615,7 @@ snapshots:
 
   agent-base@7.1.4: {}
 
-  alchemy@2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260603.1)(ws@8.21.1):
+  alchemy@2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@3.25.76))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.1):
     dependencies:
       '@alchemy.run/node-utils': 0.0.5
       '@aws-sdk/credential-providers': 3.1062.0
@@ -8576,6 +8624,61 @@ snapshots:
       '@distilled.cloud/axiom': 0.27.0(effect@4.0.0-beta.92)
       '@distilled.cloud/cloudflare': 0.27.0(effect@4.0.0-beta.92)
       '@distilled.cloud/cloudflare-rolldown-plugin': 0.11.3(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(rolldown@1.0.1)(workerd@1.20260730.1)
+      '@distilled.cloud/cloudflare-runtime': 0.11.3(@distilled.cloud/cloudflare@0.27.0(effect@4.0.0-beta.92))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(effect@4.0.0-beta.92)
+      '@distilled.cloud/cloudflare-vite-plugin': 0.11.3(@distilled.cloud/cloudflare-runtime@0.11.3(@distilled.cloud/cloudflare@0.27.0(effect@4.0.0-beta.92))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(effect@4.0.0-beta.92))(@distilled.cloud/cloudflare@0.27.0(effect@4.0.0-beta.92))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(effect@4.0.0-beta.92)(rolldown@1.0.1)(workerd@1.20260730.1)
+      '@distilled.cloud/core': 0.27.0(effect@4.0.0-beta.92)
+      '@distilled.cloud/neon': 0.27.0(effect@4.0.0-beta.92)
+      '@distilled.cloud/planetscale': 0.27.0(effect@4.0.0-beta.92)
+      '@effect/vitest': 4.0.0-beta.92(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))
+      '@libsql/client': 0.17.3
+      '@octokit/rest': 22.0.1
+      '@octokit/webhooks': 14.2.0
+      '@smithy/node-config-provider': 4.4.6
+      '@smithy/shared-ini-file-loader': 4.5.6
+      '@smithy/types': 4.14.3
+      '@types/aws-lambda': 8.10.161
+      aws4fetch: 1.0.20
+      capnweb: 0.6.1
+      effect: 4.0.0-beta.92
+      fast-glob: 3.3.3
+      fast-xml-parser: 5.8.0
+      ink: 6.8.0(react@19.2.7)
+      jszip: 3.10.1
+      libsodium-wrappers: 0.8.4
+      magic-string: 0.30.21
+      mysql2: 3.22.4(@types/node@24.13.0)
+      pathe: 2.0.3
+      pg: 8.21.0
+      picomatch: 4.0.4
+      react: 19.2.7
+      rolldown: 1.0.1
+      undici: 7.27.1
+      yaml: 2.9.0
+    optionalDependencies:
+      '@effect/platform-node': 4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1)
+      drizzle-kit: 1.0.0-rc.4
+      drizzle-orm: 1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@3.25.76)
+      vite: '@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0)'
+      ws: 8.21.1
+    transitivePeerDependencies:
+      - '@types/node'
+      - '@types/react'
+      - bufferutil
+      - pg-native
+      - react-devtools-core
+      - utf-8-validate
+      - vitest
+      - workerd
+
+  alchemy@2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260603.1)(ws@8.21.1):
+    dependencies:
+      '@alchemy.run/node-utils': 0.0.5
+      '@aws-sdk/credential-providers': 3.1062.0
+      '@clack/prompts': 0.11.0
+      '@distilled.cloud/aws': 0.27.0(effect@4.0.0-beta.92)
+      '@distilled.cloud/axiom': 0.27.0(effect@4.0.0-beta.92)
+      '@distilled.cloud/cloudflare': 0.27.0(effect@4.0.0-beta.92)
+      '@distilled.cloud/cloudflare-rolldown-plugin': 0.11.3(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(rolldown@1.0.1)(workerd@1.20260603.1)
       '@distilled.cloud/cloudflare-runtime': 0.11.3(@distilled.cloud/cloudflare@0.27.0(effect@4.0.0-beta.92))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(effect@4.0.0-beta.92)
       '@distilled.cloud/cloudflare-vite-plugin': 0.11.3(@distilled.cloud/cloudflare-runtime@0.11.3(@distilled.cloud/cloudflare@0.27.0(effect@4.0.0-beta.92))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(effect@4.0.0-beta.92))(@distilled.cloud/cloudflare@0.27.0(effect@4.0.0-beta.92))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(effect@4.0.0-beta.92)(rolldown@1.0.1)(workerd@1.20260603.1)
       '@distilled.cloud/core': 0.27.0(effect@4.0.0-beta.92)
@@ -9285,6 +9388,18 @@ snapshots:
       esbuild: 0.25.12
       get-tsconfig: 4.14.0
       jiti: 2.7.0
+
+  drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@3.25.76):
+    optionalDependencies:
+      '@cloudflare/workers-types': 4.20260702.1
+      '@effect/sql-d1': 4.0.0-beta.92(effect@4.0.0-beta.92)
+      '@effect/sql-sqlite-do': 4.0.0-beta.92(effect@4.0.0-beta.92)
+      '@libsql/client': 0.17.3
+      effect: 4.0.0-beta.92
+      mysql2: 3.22.4(@types/node@24.13.0)
+      pg: 8.21.0
+      valibot: 1.4.2(typescript@6.0.3)
+      zod: 3.25.76
 
   drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3):
     optionalDependencies:
@@ -10034,12 +10149,12 @@ snapshots:
     dependencies:
       mimic-fn: 2.1.0
 
-  openai@6.49.0(@aws-sdk/credential-provider-node@3.972.51)(@smithy/signature-v4@5.4.6)(ws@8.21.1)(zod@4.4.3):
+  openai@6.49.0(@aws-sdk/credential-provider-node@3.972.51)(@smithy/signature-v4@5.4.6)(ws@8.21.1)(zod@3.25.76):
     optionalDependencies:
       '@aws-sdk/credential-provider-node': 3.972.51
       '@smithy/signature-v4': 5.4.6
       ws: 8.21.1
-      zod: 4.4.3
+      zod: 3.25.76
 
   ora@5.4.1:
     dependencies:
@@ -10209,7 +10324,7 @@ snapshots:
       oxlint-tsgolint: 0.23.0
       vite-plus: 0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(jsdom@29.1.1)(typescript@6.0.3)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(yaml@2.9.0)
 
-  oxlint@1.79.0(vite-plus@0.1.24(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(esbuild@0.28.1)(jiti@2.7.0)(jsdom@29.1.1)(typescript@6.0.3)(yaml@2.9.0)):
+  oxlint@1.79.0(oxlint-tsgolint@0.23.0)(vite-plus@0.1.24(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(esbuild@0.28.1)(jiti@2.7.0)(jsdom@29.1.1)(typescript@6.0.3)(yaml@2.9.0)):
     optionalDependencies:
       '@oxlint/binding-android-arm-eabi': 1.79.0
       '@oxlint/binding-android-arm64': 1.79.0
@@ -10230,6 +10345,7 @@ snapshots:
       '@oxlint/binding-win32-arm64-msvc': 1.79.0
       '@oxlint/binding-win32-ia32-msvc': 1.79.0
       '@oxlint/binding-win32-x64-msvc': 1.79.0
+      oxlint-tsgolint: 0.23.0
       vite-plus: 0.1.24(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(esbuild@0.28.1)(jiti@2.7.0)(jsdom@29.1.1)(typescript@6.0.3)(yaml@2.9.0)
 
   pac-proxy-agent@7.2.0:
@@ -11274,5 +11390,7 @@ snapshots:
       '@speed-highlight/core': 1.2.15
       cookie: 1.1.1
       youch-core: 0.3.3
+
+  zod@3.25.76: {}
 
   zod@4.4.3: {}

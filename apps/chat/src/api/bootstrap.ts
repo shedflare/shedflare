@@ -17,7 +17,11 @@ export async function handleBootstrap(request: Request): Promise<Response> {
       const session = await getSession(request, env);
       const headers = new Headers({ "content-type": "application/json" });
 
-      if (!session) return new Response(JSON.stringify({ session: null }), { headers });
+      if (!session)
+        return new Response(
+          JSON.stringify({ session: null, exaApiKeyConfigured: Boolean(env.EXA_API_KEY?.trim()) }),
+          { headers },
+        );
 
       if (session.tokens) {
         headers.append(
