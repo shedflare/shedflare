@@ -9,7 +9,8 @@ export default function RightSidebar() {
 
   // Click-outside handler
   function handleClick(e: MouseEvent) {
-    if (!isVisible()) return;
+    // Portaled dialogs are outside the sidebar DOM but still own the current file selection.
+    if (!isVisible() || document.querySelector("dialog[open]")) return;
     const sidebar = document.querySelector(".right-sidebar");
     if (sidebar && e.target instanceof Node && !sidebar.contains(e.target)) {
       ctx.setSelectedFileId("");

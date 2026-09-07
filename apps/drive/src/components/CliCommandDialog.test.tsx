@@ -2,9 +2,11 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vite-plus/test";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { webcrypto } from "node:crypto";
+import { createSignal } from "solid-js";
 import { drizzle } from "drizzle-orm/d1";
 import CliUploadCommand from "./CliUploadCommand";
 import CliDownloadCommand from "./CliDownloadCommand";
+import RightSidebar from "./RightSidebar";
 import { TestDriveProvider } from "../test/test-context";
 import { asD1Database, createTestD1 } from "../test/d1-shim";
 import { asR2Bucket, R2Mock } from "../test/r2-mock";
@@ -94,6 +96,41 @@ afterEach(() => {
 });
 
 describe("CLI transfer dialogs", () => {
+  test("sidebar download dialog keeps selection during mouse interaction and restores outside dismissal after closing", async () => {
+    const [selectedId, setSelectedId] = createSignal(file.id);
+    render(() => (
+      <TestDriveProvider
+        value={{
+          selectedFileId: selectedId,
+          setSelectedFileId: setSelectedId,
+          selectedFile: () => (selectedId() === file.id ? file : undefined),
+        }}
+      >
+        <RightSidebar />
+      </TestDriveProvider>
+    ));
+    fireEvent.click(screen.getByRole("button", { name: "CLI download" }));
+    const command = await screen.findByRole<HTMLTextAreaElement>("textbox", {
+      name: "CLI command",
+    });
+    const path = screen.getByLabelText("Save as path");
+    fireEvent.mouseDown(path);
+    expect(selectedId()).toBe(file.id);
+    fireEvent.input(path, { target: { value: "/tmp/report.txt" } });
+    const copy = screen.getByRole("button", { name: "Copy command" });
+    fireEvent.mouseDown(copy);
+    fireEvent.click(copy);
+    await waitFor(() => expect(copied).toBe(command.value));
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    const close = screen.getByRole("button", { name: "Close" });
+    fireEvent.mouseDown(close);
+    fireEvent.click(close);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(selectedId()).toBe(file.id);
+    fireEvent.mouseDown(document.body);
+    expect(selectedId()).toBe("");
+  });
+
   test("upload path edits update and copy the command without issuing more tokens", async () => {
     render(() => (
       <TestDriveProvider>
