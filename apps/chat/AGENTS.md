@@ -4,6 +4,16 @@ This directory contains Shedflare Chat inside the canonical monorepo. Keep it in
 selectable, testable, buildable, and deployable through scoped workspace commands. Shared sync
 contracts live in `packages/sync-protocol`.
 
+Current route/state map: root [CONTEXT.md](../../CONTEXT.md). `src/app.tsx` registers
+`src/routes/index.tsx`, which uses `/api/chat` SSE and browser persistence. The retained Sync Engine
+DO still owns the older history and scheduled-backup path. Do not assume the current UI writes to
+those backups. Treat unifying/migrating these paths as an explicit data change. Saved legacy/backup
+route files are not registered routes; the Solid UI bridge is currently used by the factory example.
+
+Normal `test` runs `src/**/*.test.*`; `test:workers` separately exercises the local Cloudflare pool.
+The root `test:chat` command is a live Alchemy suite. Inspect root tooling ignores when checking the
+new route/API/bridge files; a successful workspace check does not imply all of them were analyzed.
+
 - Shared Shedflare dependencies must use `workspace:*`. Never commit `file:`, `link:`, sibling
   source paths, nested lockfiles, or app-local copies of root tooling.
 - Use non-production stages for deployment proofs and destroy them after smoke testing.

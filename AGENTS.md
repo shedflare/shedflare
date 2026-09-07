@@ -16,6 +16,17 @@ dependency catalog, CI workflow, and development toolchain.
   app/package work.
 - Read the nearest child `AGENTS.md` before changing an app or shared-package area.
 
+## Finding the active implementation
+
+Read [CONTEXT.md](CONTEXT.md) for the current entry-point and state-ownership map. Follow imports
+from the app's registered route to its API and persistence before relying on a similarly named
+helper or an older design document. Keep shipped behavior, migration code, and proposals distinct.
+Update the relevant map/documentation when changing a route or persistence authority.
+
+For state changes, make loading, failure, retry, and persistence behavior explicit. Derive client
+contracts from existing schemas; avoid duplicating authoritative state in a second cache/store.
+Check which files and tests the configured verification actually includes.
+
 ## Product boundary
 
 Shedflare is a self-hosted suite of personal productivity tools, normally deployed by one owner.
