@@ -23,6 +23,18 @@ const SecureUploadCapabilitySchema = union([
   SecureUploadStartCapabilitySchema,
   SecureUploadSessionCapabilitySchema,
 ]);
+const FileDownloadCapabilitySchema = object({
+  kind: literal("file-download"),
+  expiresAt: SafeNonNegativeIntegerSchema,
+  fileId: pipe(string(), minLength(1)),
+  objectKey: pipe(string(), minLength(1)),
+});
+const TransferCapabilitySchema = union([
+  SecureUploadCapabilitySchema,
+  FileDownloadCapabilitySchema,
+]);
+type TransferCapability = InferOutput<typeof TransferCapabilitySchema>;
+type FileDownloadCapability = InferOutput<typeof FileDownloadCapabilitySchema>;
 
 export type SecureUploadStartCapability = InferOutput<typeof SecureUploadStartCapabilitySchema>;
 export type SecureUploadSessionCapability = InferOutput<typeof SecureUploadSessionCapabilitySchema>;
@@ -58,21 +70,18 @@ async function hmacKey(env: CapabilityEnv, usage: KeyUsage[]) {
   );
 }
 
-function parseCapability<Value>(value: Value): SecureUploadCapability | null {
-  const result = safeParse(SecureUploadCapabilitySchema, value);
+function parseCapability<Value>(value: Value): TransferCapability | null {
+  const result = safeParse(TransferCapabilitySchema, value);
   return result.success ? result.output : null;
 }
 
-export async function signSecureUploadCapability(
-  env: CapabilityEnv,
-  capability: SecureUploadCapability,
-) {
+async function signCapability(env: CapabilityEnv, capability: TransferCapability) {
   const payload = encoder.encode(JSON.stringify(capability));
   const signature = await crypto.subtle.sign("HMAC", await hmacKey(env, ["sign"]), payload);
   return `${encodeBase64Url(payload)}.${encodeBase64Url(new Uint8Array(signature))}`;
 }
 
-export async function verifySecureUploadCapability(env: CapabilityEnv, token: string) {
+async function verifyCapability(env: CapabilityEnv, token: string) {
   const parts = token.split(".");
   if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
 
@@ -90,6 +99,24 @@ export async function verifySecureUploadCapability(env: CapabilityEnv, token: st
   } catch {
     return null;
   }
+}
+
+export function signSecureUploadCapability(env: CapabilityEnv, capability: SecureUploadCapability) {
+  return signCapability(env, capability);
+}
+
+export async function verifySecureUploadCapability(env: CapabilityEnv, token: string) {
+  const capability = await verifyCapability(env, token);
+  return capability?.kind === "file-download" ? null : capability;
+}
+
+export function signFileDownloadCapability(env: CapabilityEnv, capability: FileDownloadCapability) {
+  return signCapability(env, capability);
+}
+
+export async function verifyFileDownloadCapability(env: CapabilityEnv, token: string) {
+  const capability = await verifyCapability(env, token);
+  return capability?.kind === "file-download" ? capability : null;
 }
 
 export async function secureUploadMetadataDigest(metadata: {

@@ -2,6 +2,7 @@ import { Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi";
 import {
   DeleteResponse,
+  CliDownloadCommandResponse,
   FileResponse,
   FilesResponse,
   MultipartPartResponse,
@@ -55,6 +56,14 @@ const filePreviewEp = HttpApiEndpoint.get("preview", "/api/files/:id/preview", {
   params: Schema.Struct({ id: Schema.String }),
   success: Schema.String,
 });
+const fileDownloadCommandEp = HttpApiEndpoint.post(
+  "downloadCommand",
+  "/api/files/:id/download-command",
+  {
+    params: Schema.Struct({ id: Schema.String }),
+    success: CliDownloadCommandResponse,
+  },
+);
 
 const filesGroup = HttpApiGroup.make("files").add(
   fileListEp,
@@ -66,6 +75,7 @@ const filesGroup = HttpApiGroup.make("files").add(
   fileUpdateEp,
   fileDeleteEp,
   fileDownloadEp,
+  fileDownloadCommandEp,
   filePreviewEp,
 );
 

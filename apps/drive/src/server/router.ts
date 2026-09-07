@@ -1,7 +1,12 @@
 import { createHttpApiWebHandler } from "@shedflare/alchemy";
 import { createHttpApiAuth } from "@shedflare/auth-client/http-api";
 import { driveApi } from "./definitions";
-import { createFileHandlersGroup, listPublicFiles, servePublicFile } from "./impl/files";
+import {
+  createFileHandlersGroup,
+  listPublicFiles,
+  servePublicFile,
+  serveCliDownload,
+} from "./impl/files";
 import { createSecureUploadHandlersGroup, handleSecureUploadRequest } from "./impl/secure-uploads";
 import { createTagsGroup } from "./impl/tags";
 import type { AuthEnv } from "@shedflare/auth-client/consumer";
@@ -51,6 +56,11 @@ export function createRouter(env: Env) {
 
         const secureUploadResponse = await handleSecureUploadRequest(env, request);
         if (secureUploadResponse) return secureUploadResponse;
+
+        const cliDownloadMatch = pathname.match(/^\/api\/cli-downloads\/([^/]+)$/u);
+        if (cliDownloadMatch && method === "GET") {
+          return await serveCliDownload(env, request, decodeURIComponent(cliDownloadMatch[1]));
+        }
 
         if (pathname === "/api/public/files" && method === "GET") {
           return await listPublicFiles(env, request);

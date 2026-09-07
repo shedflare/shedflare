@@ -4,6 +4,11 @@ import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { HttpServerResponse } from "effect/unstable/http";
 import { fileTags, files, tags } from "../../db/schema";
 import { driveApi } from "../definitions";
+import { commandExpiry } from "../command-expiry";
+import {
+  signFileDownloadCapability,
+  verifyFileDownloadCapability,
+} from "../secure-upload-capability";
 import type { HandlerContext, HttpApiAuth } from "@shedflare/auth-client/http-api";
 import type { Session } from "@shedflare/auth-client/consumer";
 import { normalizeTag, parseByteRange, parseUpdateBody, publicFile } from "./file-utils";
@@ -177,6 +182,7 @@ async function persistFile(
 }
 
 type FileEnv = { DB: D1Database; FILES: R2Bucket };
+type CliFileEnv = FileEnv & { SECURE_UPLOAD_TOKEN_SECRET: string };
 type FileParams = { id: string };
 type MultipartPartParams = FileParams & { partNumber: string };
 
@@ -290,7 +296,31 @@ export async function servePublicFile(
   return await serveStoredFile({ bucket: env.FILES, file: row, request, disposition });
 }
 
-export function createFileHandlersGroup(env: FileEnv, auth: HttpApiAuth) {
+export async function serveCliDownload(env: CliFileEnv, request: Request, id: string) {
+  const token = new URL(request.url).searchParams.get("token") ?? "";
+  const capability = await verifyFileDownloadCapability(env, token);
+  const privateHeaders = { "cache-control": "no-store", "referrer-policy": "no-referrer" };
+  if (!capability || capability.fileId !== id || capability.expiresAt <= Date.now()) {
+    return new Response("Download command is invalid or expired. Create a new one in Drive.", {
+      status: 401,
+      headers: privateHeaders,
+    });
+  }
+  const row = await getFile(drizzle(env.DB), id);
+  if (!row || row.objectKey !== capability.objectKey) {
+    return new Response("Not found", { status: 404, headers: privateHeaders });
+  }
+  const response = await serveStoredFile({
+    bucket: env.FILES,
+    file: row,
+    request,
+    disposition: "download",
+  });
+  for (const [name, value] of Object.entries(privateHeaders)) response.headers.set(name, value);
+  return response;
+}
+
+export function createFileHandlersGroup(env: CliFileEnv, auth: HttpApiAuth) {
   return HttpApiBuilder.group(driveApi, "files", (handlers) =>
     handlers
       .handle("list", (ctx) =>
@@ -658,6 +688,39 @@ export function createFileHandlersGroup(env: FileEnv, auth: HttpApiAuth) {
           await env.FILES.delete(row.objectKey);
           await db.delete(files).where(eq(files.id, id));
           return { ok: true };
+        })(ctx),
+      )
+      .handle("downloadCommand", (ctx) =>
+        protectFile(auth, async (request, _session, handlerCtx) => {
+          const expiresAt = commandExpiry(await request.json().catch(() => null));
+          if (expiresAt === null) {
+            return errorResponse(
+              400,
+              "invalid_expiry",
+              "Expiry must be an integer from 30 to 900 seconds.",
+            );
+          }
+          const id = handlerCtx.params?.id ?? "";
+          const row = await getFile(drizzle(env.DB), id);
+          if (!row)
+            return errorResponse(404, "file_not_found", "The requested file no longer exists");
+          const token = await signFileDownloadCapability(env, {
+            kind: "file-download",
+            fileId: id,
+            objectKey: row.objectKey,
+            expiresAt,
+          });
+          const url = new URL(`/api/cli-downloads/${encodeURIComponent(id)}`, request.url);
+          url.searchParams.set("token", token);
+          return HttpServerResponse.fromWeb(
+            new Response(
+              JSON.stringify({
+                downloadUrl: url.toString(),
+                expiresAt: new Date(expiresAt).toISOString(),
+              }),
+              { headers: { "content-type": "application/json", "cache-control": "no-store" } },
+            ),
+          );
         })(ctx),
       )
       .handle("download", (ctx) =>

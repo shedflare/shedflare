@@ -4,6 +4,7 @@ import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { HttpServerResponse } from "effect/unstable/http";
 import { files, secureUploadSessions, secureUploadStartCapabilities } from "../../db/schema";
 import { driveApi } from "../definitions";
+import { commandExpiry } from "../command-expiry";
 import {
   SECURE_UPLOAD_MAX_BYTES,
   SECURE_UPLOAD_PART_SIZE,
@@ -13,11 +14,8 @@ import {
   type SecureUploadSessionCapability,
 } from "../secure-upload-capability";
 import type { HttpApiAuth } from "@shedflare/auth-client/http-api";
-import { array, looseObject, number, optional, safeParse, string } from "valibot";
+import { array, looseObject, number, safeParse, string } from "valibot";
 
-const DEFAULT_EXPIRY_SECONDS = 120;
-const MIN_EXPIRY_SECONDS = 30;
-const MAX_EXPIRY_SECONDS = 15 * 60;
 const SESSION_EXPIRY_MS = 6 * 60 * 60 * 1_000;
 
 type SecureUploadEnv = {
@@ -50,20 +48,6 @@ function hasForbiddenFilenameCharacter(value: string) {
   });
 }
 
-function parseExpirySeconds<Value>(value: Value) {
-  if (value === undefined) return DEFAULT_EXPIRY_SECONDS;
-  const parsed = safeParse(number(), value);
-  if (
-    !parsed.success ||
-    !Number.isInteger(parsed.output) ||
-    parsed.output < MIN_EXPIRY_SECONDS ||
-    parsed.output > MAX_EXPIRY_SECONDS
-  ) {
-    return null;
-  }
-  return parsed.output;
-}
-
 const MetadataSchema = looseObject({ name: string(), mimeType: string(), size: number() });
 const PartSchema = looseObject({ partNumber: number(), etag: string() });
 const CompleteBodySchema = looseObject({
@@ -72,7 +56,6 @@ const CompleteBodySchema = looseObject({
   size: number(),
   parts: array(PartSchema),
 });
-const StartBodySchema = looseObject({ expiresInSeconds: optional(number()) });
 
 function parseMetadata<Value>(value: Value): UploadMetadata | null {
   const parsed = safeParse(MetadataSchema, value);
@@ -598,22 +581,13 @@ export function createSecureUploadHandlersGroup(env: SecureUploadEnv, auth: Http
   return HttpApiBuilder.group(driveApi, "secureUploads", (handlers) =>
     handlers.handle("createCommand", (ctx) =>
       auth.createProtectedHandler(async (request) => {
-        const body: unknown = await request.json().catch(() => ({}));
-        const startBody = safeParse(StartBodySchema, body);
-        const expirySeconds = parseExpirySeconds(
-          startBody.success ? startBody.output.expiresInSeconds : undefined,
-        );
-        if (expirySeconds === null) {
+        const expiresAtMs = commandExpiry(await request.json().catch(() => null));
+        if (expiresAtMs === null) {
           return HttpServerResponse.fromWeb(
-            error(
-              400,
-              "invalid_expiry",
-              `Expiry must be an integer from ${MIN_EXPIRY_SECONDS} to ${MAX_EXPIRY_SECONDS} seconds.`,
-            ),
+            error(400, "invalid_expiry", "Expiry must be an integer from 30 to 900 seconds."),
           );
         }
 
-        const expiresAtMs = Date.now() + expirySeconds * 1_000;
         await cleanupExpiredSecureUploads(env);
         const nonce = crypto.randomUUID();
         await drizzle(env.DB).insert(secureUploadStartCapabilities).values({
@@ -633,6 +607,7 @@ export function createSecureUploadHandlersGroup(env: SecureUploadEnv, auth: Http
         );
         return {
           command: `bash -o pipefail -c 'curl -fsSL "$1" | bash -s -- "$2"' -- '${clientUrl.toString()}' "<path-to-file>"`,
+          clientUrl: clientUrl.toString(),
           expiresAt: new Date(expiresAtMs).toISOString(),
           maxBytes: SECURE_UPLOAD_MAX_BYTES,
         };

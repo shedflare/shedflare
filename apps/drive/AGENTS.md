@@ -12,3 +12,11 @@ lifecycle remains outside the root suite deploy/destroy commands.
 - Keep authentication owner-only. Do not add accounts, registration, tenants, or multi-user behavior.
 - E2E authentication bindings are permitted only on stages whose names start with `e2e-`.
 - Do not add `as any`; validate external inputs at their boundaries.
+
+CLI upload/download dialogs share `src/components/CliCommandDialog.tsx`; path edits derive the
+shell command locally through `src/lib/cli-commands.ts` and never issue new capabilities. Uploads
+retain the multipart session flow. Download command creation is owner-protected in the file API;
+`/api/cli-downloads/:id` verifies a purpose-specific, expiring capability bound to the file ID and
+R2 object key before streaming. The existing `SECURE_UPLOAD_TOKEN_SECRET` signs both purposes;
+upload and download tokens are not interchangeable. No public-sharing state is changed. Keep
+shell-argument tests and anonymous download/expiry tests when changing either command path.

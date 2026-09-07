@@ -4,11 +4,12 @@ import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import * as Schema from "effect/Schema";
 import { createRouter, type Env } from "./router";
-import { secureUploadSessions } from "../db/schema";
+import { files as fileRecords, secureUploadSessions } from "../db/schema";
 import { asD1Database, createTestD1, D1Shim } from "../test/d1-shim";
 import { asR2Bucket, R2Mock } from "../test/r2-mock";
 import {
   DeleteResponse,
+  CliDownloadCommandResponse,
   FileResponse,
   FilesResponse,
   MultipartPartResponse,
@@ -21,9 +22,155 @@ import {
   SECURE_UPLOAD_MAX_BYTES,
   SECURE_UPLOAD_PART_SIZE,
   signSecureUploadCapability,
+  signFileDownloadCapability,
 } from "./secure-upload-capability";
 
 const SecureUploadSessionResponse = Schema.Struct({ sessionToken: Schema.String });
+
+describe("CLI download commands", () => {
+  const secret = "test-secure-upload-token-secret-at-least-32-bytes";
+
+  async function fixture() {
+    const db = createTestD1();
+    const env = makeTestEnv(db, new R2Mock());
+    const ownerRouter = createRouter(env);
+    const form = new FormData();
+    form.set("file", new File(["private file contents"], "report.txt", { type: "text/plain" }));
+    const created = await decodeJson(
+      await ownerRouter.fetch(makeRequest("/api/files", { method: "POST", body: form })),
+      FileResponse,
+    );
+    const file = created.file;
+    const response = await ownerRouter.fetch(
+      makeRequest(`/api/files/${file.id}/download-command`, {
+        method: "POST",
+        body: JSON.stringify({ expiresInSeconds: 120 }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    const command = await decodeJson(response, CliDownloadCommandResponse);
+    const anonymousRouter = createRouter({ ...env, DEV_AUTH_EMAIL: undefined });
+    return { db, env, ownerRouter, anonymousRouter, file, command };
+  }
+
+  test("a command downloads a private file without login and supports byte ranges", async () => {
+    const { anonymousRouter, file, command } = await fixture();
+    const response = await anonymousRouter.fetch(new Request(command.downloadUrl));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.text()).toBe("private file contents");
+    const range = await anonymousRouter.fetch(
+      new Request(command.downloadUrl, { headers: { range: "bytes=0-6" } }),
+    );
+    expect(range.status).toBe(206);
+    expect(await range.text()).toBe("private");
+    expect(
+      (await anonymousRouter.fetch(makeRequest(`/public/files/${file.id}/download`))).status,
+    ).toBe(404);
+    expect(Date.parse(command.expiresAt)).toBeGreaterThan(Date.now() + 110_000);
+  });
+
+  test("only the signed-in owner can issue commands", async () => {
+    const { anonymousRouter, file } = await fixture();
+    const response = await anonymousRouter.fetch(
+      makeRequest(`/api/files/${file.id}/download-command`, { method: "POST", body: "{}" }),
+    );
+    expect(response.status).toBe(401);
+  });
+
+  test("missing, tampered, expired, wrong-file, and upload tokens cannot download", async () => {
+    const { anonymousRouter, file, command } = await fixture();
+    const original = new URL(command.downloadUrl);
+    const tampered = new URL(original);
+    tampered.searchParams.set("token", `x${original.searchParams.get("token")}`);
+    const wrongFile = new URL(original);
+    wrongFile.pathname = "/api/cli-downloads/another-file";
+    const expired = new URL(original);
+    expired.searchParams.set(
+      "token",
+      await signFileDownloadCapability(
+        { SECURE_UPLOAD_TOKEN_SECRET: secret },
+        {
+          kind: "file-download",
+          fileId: file.id,
+          objectKey: "unused",
+          expiresAt: Date.now() - 1,
+        },
+      ),
+    );
+    const upload = new URL(original);
+    upload.searchParams.set(
+      "token",
+      await signSecureUploadCapability(
+        { SECURE_UPLOAD_TOKEN_SECRET: secret },
+        {
+          kind: "secure-upload-start",
+          expiresAt: Date.now() + 60_000,
+          maxBytes: SECURE_UPLOAD_MAX_BYTES,
+          nonce: crypto.randomUUID(),
+        },
+      ),
+    );
+    for (const url of [
+      new URL(original.pathname, original),
+      tampered,
+      wrongFile,
+      expired,
+      upload,
+    ]) {
+      expect((await anonymousRouter.fetch(new Request(url))).status).toBe(401);
+    }
+    const token = original.searchParams.get("token");
+    expect(
+      (
+        await anonymousRouter.fetch(
+          makeRequest(`/api/secure-uploads/start/${token}`, { method: "POST", body: "{}" }),
+        )
+      ).status,
+    ).toBe(401);
+  });
+
+  test("deleting the file invalidates an existing command", async () => {
+    const { ownerRouter, anonymousRouter, file, command } = await fixture();
+    expect(
+      (await ownerRouter.fetch(makeRequest(`/api/files/${file.id}`, { method: "DELETE" }))).status,
+    ).toBe(200);
+    expect((await anonymousRouter.fetch(new Request(command.downloadUrl))).status).toBe(404);
+  });
+
+  test("a command cannot read replacement bytes under the same file ID", async () => {
+    const { db, anonymousRouter, file, command } = await fixture();
+    await drizzle(asD1Database(db))
+      .update(fileRecords)
+      .set({ objectKey: "replacement-object" })
+      .where(eq(fileRecords.id, file.id));
+    expect((await anonymousRouter.fetch(new Request(command.downloadUrl))).status).toBe(404);
+  });
+
+  test("invalid expiry and missing files cannot issue a command", async () => {
+    const { ownerRouter, file } = await fixture();
+    for (const expiresInSeconds of [0, 901, 1.5, "120"]) {
+      expect(
+        (
+          await ownerRouter.fetch(
+            makeRequest(`/api/files/${file.id}/download-command`, {
+              method: "POST",
+              body: JSON.stringify({ expiresInSeconds }),
+            }),
+          )
+        ).status,
+      ).toBe(400);
+    }
+    expect(
+      (
+        await ownerRouter.fetch(
+          makeRequest("/api/files/missing/download-command", { method: "POST", body: "{}" }),
+        )
+      ).status,
+    ).toBe(404);
+  });
+});
 
 async function decodeJson<SchemaType extends Parameters<typeof Schema.decodeUnknownSync>[0]>(
   response: Response,

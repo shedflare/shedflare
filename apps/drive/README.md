@@ -12,10 +12,18 @@ be configured and deployed independently even though its source lives in the She
 
 Drive uploads multipart files in 10 MiB parts with up to three concurrent parts, retries transient failures, reports progress, and aborts unfinished uploads when canceled.
 
-The signed-in Drive toolbar can create a short-lived secure upload command for sending a local
-file from another shell. The command requires Bash and curl, starts with a two-minute
+Choose **CLI upload** in the signed-in toolbar, enter a local file path, and copy the command.
+The preview updates as you type, including paths with spaces, apostrophes, or `~/`. Enter the
+path without surrounding quotes. The command requires Bash and curl, starts with a two-minute
 capability by default, transparently uses 10 MiB multipart requests, and rejects files over 500 MB.
 Once an upload starts, its file-bound session can continue after the initial capability expires.
+
+Choose **CLI download** in a file's details or context menu to get a curl command. Edit **Save as
+path** to choose the destination, including its filename; missing directories are created. The
+command grants access only to that file until expiry and does not make it public. Anyone holding
+the command can download that file during its validity period. Downloads can be retried (including
+byte-range requests) before expiry; deleting the file invalidates the command. An already-started
+transfer can finish after expiry. Both dialogs offer 2-, 5-, and 10-minute commands and renewal.
 
 ## Requirements
 

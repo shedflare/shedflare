@@ -63,7 +63,14 @@ export type SessionResponse = Schema.Schema.Type<typeof SessionResponse>;
 
 export const SecureUploadCommandResponse = Schema.Struct({
   command: Schema.String,
+  clientUrl: Schema.String,
   expiresAt: Schema.String,
   maxBytes: Schema.Number,
 });
 export type SecureUploadCommandResponse = Schema.Schema.Type<typeof SecureUploadCommandResponse>;
+
+export const CliDownloadCommandResponse = Schema.Struct({
+  downloadUrl: Schema.String,
+  expiresAt: Schema.String,
+});
+export type CliDownloadCommandResponse = Schema.Schema.Type<typeof CliDownloadCommandResponse>;

@@ -1,5 +1,6 @@
 import { Show } from "solid-js";
 import { useDrive, fileGlyph, formatSize } from "../context";
+import CliDownloadCommand from "./CliDownloadCommand";
 
 export default function FileDetailPanel() {
   const ctx = useDrive();
@@ -79,6 +80,7 @@ export default function FileDetailPanel() {
               <button class="btn btn-primary" onClick={() => ctx.download(f())}>
                 Download
               </button>
+              <CliDownloadCommand file={f()} />
               <Show
                 when={f().isPublic}
                 fallback={
