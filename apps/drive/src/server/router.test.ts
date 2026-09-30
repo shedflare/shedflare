@@ -4,7 +4,12 @@ import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import * as Schema from "effect/Schema";
 import { createRouter, type Env } from "./router";
-import { files as fileRecords, secureUploadSessions } from "../db/schema";
+import {
+  files as fileRecords,
+  secureUploadSessions,
+  tags as tagRecords,
+  fileTags,
+} from "../db/schema";
 import { asD1Database, createTestD1, D1Shim } from "../test/d1-shim";
 import { asR2Bucket, R2Mock } from "../test/r2-mock";
 import {
@@ -227,6 +232,87 @@ describe("file API", () => {
     const body = await decodeJson(res, FilesResponse);
     expect(body.files).toEqual([]);
     expect(body.nextOffset).toBeNull();
+  });
+
+  test("type filters combine with search and tags before pagination", async () => {
+    const records = Array.from({ length: 75 }, (_, index) => ({
+      id: `filter-${index}`,
+      objectKey: `filter-${index}`,
+      name: `project-${index}.dat`,
+      mimeType: index < 35 ? "image/png" : "text/plain",
+      size: 1,
+      createdAt: new Date(1_000 + index * 1_000).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+    }));
+    await drizzle(asD1Database(db)).insert(fileRecords).values(records);
+    await drizzle(asD1Database(db))
+      .insert(tagRecords)
+      .values({ id: "work-tag", name: "work", normalizedName: "work" });
+    await drizzle(asD1Database(db))
+      .insert(fileTags)
+      .values(records.slice(0, 35).map((file) => ({ fileId: file.id, tagId: "work-tag" })));
+    const first = await decodeJson(
+      await router.fetch(makeRequest("/api/files?type=images&tag=work&search=project")),
+      FilesResponse,
+    );
+    expect(first.files).toHaveLength(30);
+    expect(
+      first.files.every((file) => file.mimeType === "image/png" && file.tags.includes("work")),
+    ).toBe(true);
+    expect(first.nextOffset).toBe(30);
+    const second = await decodeJson(
+      await router.fetch(makeRequest("/api/files?type=images&tag=work&search=project&offset=30")),
+      FilesResponse,
+    );
+    expect(second.files).toHaveLength(5);
+    expect(second.nextOffset).toBeNull();
+    expect(new Set([...first.files, ...second.files].map((file) => file.id)).size).toBe(35);
+    const excluded = await decodeJson(
+      await router.fetch(makeRequest("/api/files?type=documents&tag=work")),
+      FilesResponse,
+    );
+    expect(excluded.files).toEqual([]);
+    expect((await router.fetch(makeRequest("/api/files?type=invalid"))).status).toBe(400);
+  });
+
+  test("all MIME groups and Other form distinct file-type filters", async () => {
+    const cases = [
+      ["images", "image/webp"],
+      ["videos", "video/mp4"],
+      ["audio", "audio/mpeg"],
+      ["pdf", "application/pdf"],
+      ["documents", "text/html"],
+      ["documents", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+      ["documents", "application/json"],
+      ["archives", "application/zip"],
+      ["archives", "application/x-7z-compressed"],
+      ["other", "application/octet-stream"],
+    ];
+    await drizzle(asD1Database(db))
+      .insert(fileRecords)
+      .values(
+        cases.map(([type, mimeType], index) => ({
+          id: `mime-${index}`,
+          objectKey: `mime-${index}`,
+          name: type,
+          mimeType,
+          size: 1,
+          createdAt: new Date(0).toISOString(),
+          updatedAt: new Date(0).toISOString(),
+        })),
+      );
+    for (const type of new Set(cases.map(([type]) => type))) {
+      const result = await decodeJson(
+        await router.fetch(makeRequest(`/api/files?type=${type}`)),
+        FilesResponse,
+      );
+      expect(result.files.map((file) => file.mimeType).toSorted()).toEqual(
+        cases
+          .filter(([group]) => group === type)
+          .map(([, mime]) => mime)
+          .toSorted(),
+      );
+    }
   });
 
   test("POST /api/files creates a file", async () => {
@@ -748,6 +834,83 @@ describe("tags API", () => {
     expect(res.status).toBe(200);
     const body = await decodeJson(res, TagsResponse);
     expect(body.tags).toEqual([]);
+  });
+
+  async function uploadWithTags(name: string, tags: string) {
+    const form = new FormData();
+    form.set("file", new File(["x"], name, { type: "text/plain" }));
+    form.set("tags", tags);
+    return (
+      await decodeJson(
+        await router.fetch(makeRequest("/api/files", { method: "POST", body: form })),
+        FileResponse,
+      )
+    ).file;
+  }
+
+  async function editTags(id: string, tags: string[]) {
+    return router.fetch(
+      makeRequest(`/api/files/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ tags }),
+      }),
+    );
+  }
+
+  test("tag edits normalize, reuse existing tags, persist, and update counts", async () => {
+    const file = await uploadWithTags("one.txt", "old");
+    await uploadWithTags("two.txt", "work");
+    const saved = await decodeJson(
+      await editTags(file.id, [" WORK ", "work", " New   tag "]),
+      FileResponse,
+    );
+    expect(saved.file.tags.toSorted()).toEqual(["new tag", "work"]);
+    const counts = await decodeJson(await router.fetch(makeRequest("/api/tags")), TagsResponse);
+    expect(counts.tags).toEqual([
+      { name: "new tag", count: 1 },
+      { name: "work", count: 2 },
+    ]);
+    const reloaded = await decodeJson(
+      await router.fetch(makeRequest("/api/files?tag=new%20tag")),
+      FilesResponse,
+    );
+    expect(reloaded.files[0].tags.toSorted()).toEqual(["new tag", "work"]);
+    await editTags(file.id, []);
+    expect(
+      (await decodeJson(await router.fetch(makeRequest("/api/tags")), TagsResponse)).tags,
+    ).toEqual([{ name: "work", count: 1 }]);
+  });
+
+  test("a failed tag replacement rolls back tags and assignments", async () => {
+    const file = await uploadWithTags("one.txt", "original");
+    db.exec(
+      "CREATE TRIGGER fail_tag BEFORE INSERT ON file_tags BEGIN SELECT RAISE(ABORT, 'fixture storage failure'); END",
+    );
+    expect((await editTags(file.id, ["replacement"])).status).toBe(500);
+    const reloaded = await decodeJson(await router.fetch(makeRequest("/api/files")), FilesResponse);
+    expect(reloaded.files[0].tags).toEqual(["original"]);
+    expect(reloaded.files[0].updatedAt).toBe(file.updatedAt);
+    expect(await db.prepare("SELECT name FROM tags ORDER BY name").all()).toEqual({
+      results: [{ name: "original" }],
+    });
+    db.exec("DROP TRIGGER fail_tag");
+    expect((await editTags(file.id, ["replacement"])).status).toBe(200);
+  });
+
+  test("invalid tag edits leave saved tags intact", async () => {
+    const file = await uploadWithTags("one.txt", "original");
+    expect((await editTags(file.id, ["a,b"])).status).toBe(400);
+    expect(
+      (
+        await editTags(
+          file.id,
+          Array.from({ length: 21 }, (_, i) => `tag-${i}`),
+        )
+      ).status,
+    ).toBe(400);
+    const reloaded = await decodeJson(await router.fetch(makeRequest("/api/files")), FilesResponse);
+    expect(reloaded.files[0].tags).toEqual(["original"]);
   });
 
   test("GET /api/tags returns tags from uploaded files", async () => {

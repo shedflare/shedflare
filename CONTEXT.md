@@ -72,6 +72,16 @@ to token management, so the token exists before the owner opens the list. Token 
 existing access appear in separate responsive panels.
 See [CLI agent access](packages/cli/README.md) for setup and the bundled inspection skill.
 
+## Drive file organization
+
+The registered home route uses `src/context.tsx` for the file query and current server records.
+`FileTagPicker` edits the selected file through owner-protected PATCH `/api/files/:id`; D1 `tags`
+and `file_tags` remain authoritative. Tag replacement uses a transactional D1 batch. The UI only
+updates after the saved file response; failed saves retain the draft for retry. Sidebar tag counts
+refresh separately with loading/error/retry states. Type and tag capsules combine with search in
+GET `/api/files` before pagination. `src/shared/file-types.ts` defines MIME groups; no schema
+migration is required. Query request guards discard outdated responses after filter changes.
+
 ## Chat currently has two data paths
 
 The active route imports `useChat` from `@tanstack/ai-solid`. Its `/api/chat` endpoint runs TanStack
@@ -99,7 +109,7 @@ verification before use as implementation instructions.
 | `@shedflare/cli`                                    | Operator commands; config/manifest policy delegates to Core. Run from repo root and read command bodies before assuming a flag changes execution.                                                                                                           |
 | `@shedflare/console`                                | Local Vite middleware API and operator UI. Config patches delegate to Core; inventory/usage are observations. Separate saved config from editable drafts.                                                                                                   |
 | `@shedflare/ui`                                     | Small tested Solid/Tokenami primitives and theme tooling. Not yet adopted by the apps.                                                                                                                                                                      |
-| `@shedflare/test-utils`                             | SQLite-backed D1 shim, R2 substitute, migration loader. D1 shim `batch` currently does not execute statements or model atomicity.                                                                                                                           |
+| `@shedflare/test-utils`                             | SQLite-backed D1 shim, R2 substitute, migration loader. D1 shim `batch` executes statements in a SQLite transaction and rolls back failures.                                                                                                                |
 
 Root tooling also lives in `tooling/`, `tools/`, `scripts/`, and `infra/`.
 

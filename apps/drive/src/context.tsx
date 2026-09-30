@@ -19,6 +19,7 @@ import {
   SessionResponse,
 } from "./types";
 import { formatSize, fileGlyph, sortFiles } from "./utils";
+import type { FileTypeFilter } from "./shared/file-types";
 
 export { formatSize, fileGlyph };
 
@@ -70,12 +71,15 @@ export type DriveContextValue = {
   tags: () => TagSummary[];
   loadFiles: (append?: boolean, pageOffset?: number) => Promise<void>;
   loadTags: () => Promise<void>;
+  tagsState: () => { status: "loading" | "ready" } | { status: "error"; message: string };
 
   // ── Query ────────────────────────────────
   search: () => string;
   setSearch: (v: string) => void;
   selectedTag: () => string;
   setSelectedTag: (v: string) => void;
+  selectedFileType: () => FileTypeFilter;
+  setSelectedFileType: (v: FileTypeFilter) => void;
   selectedFileId: () => string;
   setSelectedFileId: (v: string) => void;
   selectedFile: () => DriveFile | undefined;
@@ -128,6 +132,7 @@ export type DriveContextValue = {
   publicUrl: (file: DriveFile) => string;
   copyPublicLink: (file: DriveFile) => Promise<void>;
   setFilePublic: (file: DriveFile, isPublic: boolean) => Promise<void>;
+  setFileTags: (file: DriveFile, tags: string[]) => Promise<void>;
   remove: (file: DriveFile) => Promise<void>;
   removeSelected: () => Promise<void>;
   downloadSelected: () => void;
@@ -150,10 +155,14 @@ export function DriveProvider(props: { children: import("solid-js").JSX.Element 
   // ── Data ──────────────────────────────────
   const [files, setFiles] = createSignal<DriveFile[]>([]);
   const [tags, setTags] = createSignal<TagSummary[]>([]);
+  const [tagsState, setTagsState] = createSignal<ReturnType<DriveContextValue["tagsState"]>>({
+    status: "loading",
+  });
 
   // ── Query ─────────────────────────────────
   const [search, setSearch] = createSignal("");
   const [selectedTag, setSelectedTag] = createSignal("");
+  const [selectedFileType, setSelectedFileType] = createSignal<FileTypeFilter>("");
   const [selectedFileId, setSelectedFileId] = createSignal("");
 
   // ── View ──────────────────────────────────
@@ -216,29 +225,52 @@ export function DriveProvider(props: { children: import("solid-js").JSX.Element 
     const params = new URLSearchParams();
     if (search().trim()) params.set("search", search().trim());
     if (selectedTag()) params.set("tag", selectedTag());
+    if (selectedFileType()) params.set("type", selectedFileType());
     return params.toString();
   });
 
   // ── API ───────────────────────────────────
 
+  let filesRequest = 0;
   async function loadFiles(append = false, pageOffset = 0) {
+    const request = ++filesRequest;
+    const requestedQuery = query();
     setFilesLoading(true);
     try {
-      const base = query() ? `?${query()}&` : "?";
+      const base = requestedQuery ? `?${requestedQuery}&` : "?";
       const data = await requestJson(
         `/api/files${base}limit=30&offset=${pageOffset}`,
         FilesResponse,
       );
+      if (request !== filesRequest || requestedQuery !== query()) return;
       setFiles((prev) => (append ? [...prev, ...data.files] : [...data.files]));
+      setOffset(pageOffset);
       setHasMore(data.nextOffset !== null);
+    } catch (error) {
+      if (request === filesRequest && requestedQuery === query()) throw error;
     } finally {
-      setFilesLoading(false);
+      if (request === filesRequest) setFilesLoading(false);
     }
   }
 
+  let tagsRequest = 0;
   async function loadTags() {
-    const data = await requestJson("/api/tags", TagsResponse);
-    setTags([...data.tags]);
+    const request = ++tagsRequest;
+    setTagsState({ status: "loading" });
+    try {
+      const data = await requestJson("/api/tags", TagsResponse);
+      if (request !== tagsRequest) return;
+      setTags([...data.tags]);
+      setTagsState({ status: "ready" });
+      if (selectedTag() && !data.tags.some((tag) => tag.name === selectedTag())) setSelectedTag("");
+    } catch (error) {
+      if (request !== tagsRequest) return;
+      setTagsState({
+        status: "error",
+        message: error instanceof Error ? error.message : "Could not load tags",
+      });
+      throw error;
+    }
   }
 
   async function bootstrap() {
@@ -246,7 +278,7 @@ export function DriveProvider(props: { children: import("solid-js").JSX.Element 
       const session = await requestJson("/api/session", SessionResponse);
       setUserEmail(session.user.email);
       setUnauthorized(false);
-      await loadTags();
+      await loadTags().catch(() => {});
     } catch (err) {
       if (err instanceof Error && err.message.includes("Unauthorized")) {
         // Hint was stale (or this is the post-silent-auth sign-in screen): drop
@@ -345,6 +377,27 @@ export function DriveProvider(props: { children: import("solid-js").JSX.Element 
     }
   }
 
+  async function setFileTags(file: DriveFile, tags: string[]) {
+    const data = await requestJson(`/api/files/${file.id}`, FileResponse, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ tags }),
+    });
+    const refreshFiles = filesLoading() || Boolean(selectedTag() || search().trim());
+    // Invalidate reads begun before this write so they cannot restore old tags.
+    filesRequest++;
+    setFilesLoading(false);
+    // Use the saved server record; failed writes leave the displayed tags intact.
+    setFiles((prev) => prev.map((f) => (f.id === file.id ? data.file : f)));
+    if (refreshFiles) {
+      void loadFiles(false, 0).catch((error) =>
+        addToast(error instanceof Error ? error.message : "Could not refresh files", "error"),
+      );
+    }
+    // A failed count refresh is separately retryable and does not undo a saved edit.
+    void loadTags().catch(() => {});
+  }
+
   async function remove(file: DriveFile) {
     setError("");
     try {
@@ -412,8 +465,8 @@ export function DriveProvider(props: { children: import("solid-js").JSX.Element 
   }
 
   async function loadMore() {
+    if (filesLoading() || !hasMore()) return;
     const next = offset() + 30;
-    setOffset(next);
     await loadFiles(true, next);
   }
 
@@ -425,10 +478,13 @@ export function DriveProvider(props: { children: import("solid-js").JSX.Element 
     tags,
     loadFiles,
     loadTags,
+    tagsState,
     search,
     setSearch,
     selectedTag,
     setSelectedTag,
+    selectedFileType,
+    setSelectedFileType,
     selectedFileId,
     setSelectedFileId,
     selectedFile,
@@ -467,6 +523,7 @@ export function DriveProvider(props: { children: import("solid-js").JSX.Element 
     publicUrl,
     copyPublicLink,
     setFilePublic,
+    setFileTags,
     remove,
     removeSelected,
     downloadSelected,

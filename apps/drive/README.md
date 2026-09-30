@@ -6,11 +6,18 @@ be configured and deployed independently even though its source lives in the She
 ## Features
 
 - Files stored in a private R2 bucket
-- Searchable D1 metadata, tags, and public-file links
+- Searchable D1 metadata, editable tags, file-type filters, and public-file links
 - Multipart uploads for files larger than 10 MiB
 - Owner-only authentication through Shedflare Auth
 
 Drive uploads multipart files in 10 MiB parts with up to three concurrent parts, retries transient failures, reports progress, and aborts unfinished uploads when canceled.
+
+Use **+** beside a file's privacy badge to search existing tags or create one while typing.
+Click a tag's × to remove it. Sidebar tag and file-type capsules combine with search across the
+whole library; click an active capsule again (or **All**) to clear that filter. File types use the
+stored MIME type: images, videos, audio, PDFs, documents (including text/code), archives, and other.
+Tag edits save immediately; failed saves retain the current tags and can be retried. A failed
+sidebar tag refresh has its own **Retry** control. Existing data needs no migration.
 
 Choose **CLI upload** in the signed-in toolbar, enter a local file path, and copy the command.
 The preview updates as you type, including paths with spaces, apostrophes, or `~/`. Enter the

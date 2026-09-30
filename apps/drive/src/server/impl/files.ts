@@ -13,6 +13,9 @@ import type { HandlerContext, HttpApiAuth } from "@shedflare/auth-client/http-ap
 import type { Session } from "@shedflare/auth-client/consumer";
 import { normalizeTag, parseByteRange, parseUpdateBody, publicFile } from "./file-utils";
 import { array, looseObject, number, optional, safeParse, string, union } from "valibot";
+import { isFileTypeFilter } from "../../shared/file-types";
+import { MAX_FILE_TAGS } from "../../shared/tags";
+import { fileTypeWhere } from "./file-type-filter";
 
 type Db = DrizzleD1Database;
 
@@ -61,7 +64,14 @@ function parseTags<Value>(value: Value): string[] {
   const result = safeParse(TagsInputSchema, value);
   if (!result.success) return [];
   const values = Array.isArray(result.output) ? result.output : result.output.split(",");
-  return Array.from(new Set(values.map(normalizeTag).filter(Boolean))).slice(0, 20);
+  return Array.from(
+    new Set(
+      values
+        .flatMap((value) => value.split(","))
+        .map(normalizeTag)
+        .filter(Boolean),
+    ),
+  ).slice(0, MAX_FILE_TAGS);
 }
 
 function parseUploadMetadata<Value>(value: Value): UploadMetadata | null {
@@ -112,11 +122,10 @@ function parseUploadedParts<Value>(value: Value): R2UploadedPart[] | null {
   return parts;
 }
 
-async function setFileTags(db: Db, fileId: string, tagNames: string[]) {
-  await db.delete(fileTags).where(eq(fileTags.fileId, fileId));
-  if (tagNames.length === 0) return;
-
-  await db
+function fileTagStatements(db: Db, fileId: string, tagNames: string[]) {
+  const clear = db.delete(fileTags).where(eq(fileTags.fileId, fileId));
+  if (tagNames.length === 0) return [clear] as const;
+  const create = db
     .insert(tags)
     .values(
       tagNames.map((tag) => ({
@@ -127,17 +136,16 @@ async function setFileTags(db: Db, fileId: string, tagNames: string[]) {
     )
     .onConflictDoNothing({ target: tags.normalizedName });
 
-  const storedTags = await db
-    .select({ id: tags.id })
-    .from(tags)
-    .where(inArray(tags.normalizedName, tagNames))
-    .all();
-  if (storedTags.length > 0) {
-    await db
-      .insert(fileTags)
-      .values(storedTags.map((tag) => ({ fileId, tagId: tag.id })))
-      .onConflictDoNothing();
-  }
+  const assign = db
+    .insert(fileTags)
+    .select(
+      db
+        .select({ fileId: sql<string>`${fileId}`.as("file_id"), tagId: tags.id })
+        .from(tags)
+        .where(inArray(tags.normalizedName, tagNames)),
+    )
+    .onConflictDoNothing();
+  return [clear, create, assign] as const;
 }
 
 async function getFile(db: Db, id: string) {
@@ -166,7 +174,7 @@ async function persistFile(
   db: Db,
   input: UploadMetadata & { id: string; objectKey: string; now: string },
 ) {
-  await db.insert(files).values({
+  const insert = db.insert(files).values({
     id: input.id,
     objectKey: input.objectKey,
     name: input.name,
@@ -177,7 +185,7 @@ async function persistFile(
     createdAt: input.now,
     updatedAt: input.now,
   });
-  await setFileTags(db, input.id, input.tags);
+  await db.batch([insert, ...fileTagStatements(db, input.id, input.tags)]);
   return await getFile(db, input.id);
 }
 
@@ -329,6 +337,9 @@ export function createFileHandlersGroup(env: CliFileEnv, auth: HttpApiAuth) {
           const url = new URL(webReq.url);
           const search = url.searchParams.get("search")?.trim() ?? "";
           const tag = normalizeTag(url.searchParams.get("tag") ?? "");
+          const fileType = url.searchParams.get("type") ?? "";
+          if (!isFileTypeFilter(fileType))
+            return errorResponse(400, "invalid_file_type", "Unknown file type filter");
           const rawLimit = parseInt(url.searchParams.get("limit") ?? "30", 10);
           const limit = Math.min(Math.max(isNaN(rawLimit) ? 30 : rawLimit, 1), 100);
           const rawOffset = parseInt(url.searchParams.get("offset") ?? "0", 10);
@@ -361,7 +372,7 @@ export function createFileHandlersGroup(env: CliFileEnv, auth: HttpApiAuth) {
             .from(files)
             .leftJoin(fileTags, eq(fileTags.fileId, files.id))
             .leftJoin(tags, eq(tags.id, fileTags.tagId))
-            .where(and(searchWhere, tagWhere))
+            .where(and(searchWhere, tagWhere, fileTypeWhere(fileType)))
             .groupBy(files.id)
             .orderBy(desc(files.createdAt))
             .limit(limit + 1)
@@ -663,16 +674,22 @@ export function createFileHandlersGroup(env: CliFileEnv, auth: HttpApiAuth) {
           const name = body.name?.trim() || current.name;
           const description = body.description?.trim() ?? current.description ?? "";
           const isPublic = body.isPublic ?? Boolean(current.isPublic);
-          const tagNames: string[] = body.tags
-            ? Array.from(new Set(body.tags.map(normalizeTag).filter(Boolean))).slice(0, 20)
-            : (current.tags?.split(",") ?? []);
+          const tagNames = body.tags
+            ? Array.from(new Set(body.tags.map(normalizeTag).filter(Boolean)))
+            : [];
+          if (tagNames.length > MAX_FILE_TAGS || tagNames.some((tag) => tag.includes(","))) {
+            return errorResponse(400, "invalid_tags", "Use up to 20 tags without commas.");
+          }
           const now = new Date().toISOString();
 
-          await db
+          const update = db
             .update(files)
             .set({ name, description, isPublic, updatedAt: now })
             .where(eq(files.id, id));
-          await setFileTags(db, id, tagNames);
+          await db.batch([
+            update,
+            ...(body.tags !== undefined ? fileTagStatements(db, id, tagNames) : []),
+          ]);
 
           const row = await getFile(db, id);
           if (!row) return HttpServerResponse.fromWeb(new Response("Not found", { status: 404 }));

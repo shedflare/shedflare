@@ -1,6 +1,4 @@
-export function normalizeTag(tag: string) {
-  return tag.trim().toLowerCase().replaceAll(/\s+/g, " ");
-}
+export { normalizeTag } from "../../shared/tags";
 
 export type ParsedByteRange =
   | { kind: "full" }

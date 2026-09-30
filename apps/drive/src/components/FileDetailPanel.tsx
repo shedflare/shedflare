@@ -1,6 +1,7 @@
 import { Show } from "solid-js";
 import { useDrive, fileGlyph, formatSize } from "../context";
 import CliDownloadCommand from "./CliDownloadCommand";
+import FileTagPicker from "./FileTagPicker";
 
 export default function FileDetailPanel() {
   const ctx = useDrive();
@@ -37,10 +38,20 @@ export default function FileDetailPanel() {
           <div class="detail-body">
             <h2 class="detail-name">{f().name}</h2>
 
-            <div class="share-state" classList={{ public: f().isPublic }}>
-              <span class="share-dot" />
-              <span>{f().isPublic ? "Publicly shared" : "Private"}</span>
-            </div>
+            <Show when={f().id} keyed>
+              {(id) => (
+                <FileTagPicker file={f()}>
+                  <div
+                    id={`share-state-${id}`}
+                    class="share-state"
+                    classList={{ public: f().isPublic }}
+                  >
+                    <span class="share-dot" />
+                    <span>{f().isPublic ? "Publicly shared" : "Private"}</span>
+                  </div>
+                </FileTagPicker>
+              )}
+            </Show>
 
             <Show when={f().description}>
               <p class="detail-description">{f().description}</p>
@@ -64,17 +75,6 @@ export default function FileDetailPanel() {
                 <dd>{new Date(f().updatedAt).toLocaleString()}</dd>
               </div>
             </dl>
-
-            <div class="detail-tags">
-              <span class="detail-tags-label">Tags</span>
-              <Show when={f().tags.length > 0} fallback={<span class="no-tags">No tags</span>}>
-                <div class="detail-tags-list">
-                  {f().tags.map((tag) => (
-                    <span class="detail-tag">{tag}</span>
-                  ))}
-                </div>
-              </Show>
-            </div>
 
             <div class="detail-actions">
               <button class="btn btn-primary" onClick={() => ctx.download(f())}>

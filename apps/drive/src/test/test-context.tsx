@@ -1,12 +1,14 @@
 import { createSignal, type JSX } from "solid-js";
 import { DriveCtx, type DriveContextValue } from "../context";
 import type { DriveFile, TagSummary, Toast } from "../types";
+import type { FileTypeFilter } from "../shared/file-types";
 
 export function createMockContext(overrides?: Partial<DriveContextValue>): DriveContextValue {
   const [files] = createSignal<DriveFile[]>([]);
   const [tags] = createSignal<TagSummary[]>([]);
   const [search, setSearch] = createSignal("");
   const [selectedTag, setSelectedTag] = createSignal("");
+  const [selectedFileType, setSelectedFileType] = createSignal<FileTypeFilter>("");
   const [selectedFileId, setSelectedFileId] = createSignal("");
   const [viewMode, setViewMode] = createSignal<"grid" | "list">("grid");
   const [sortBy, setSortBy] = createSignal<"name" | "date" | "size">("date");
@@ -35,10 +37,13 @@ export function createMockContext(overrides?: Partial<DriveContextValue>): Drive
     tags,
     loadFiles: noopAsync,
     loadTags: noopAsync,
+    tagsState: () => ({ status: "ready" }),
     search,
     setSearch,
     selectedTag,
     setSelectedTag,
+    selectedFileType,
+    setSelectedFileType,
     selectedFileId,
     setSelectedFileId,
     selectedFile: () => undefined,
@@ -87,6 +92,7 @@ export function createMockContext(overrides?: Partial<DriveContextValue>): Drive
     publicUrl: (file: DriveFile) => `https://test.example.com/public/files/${file.id}/download`,
     copyPublicLink: noopAsync,
     setFilePublic: noopAsync,
+    setFileTags: noopAsync,
     remove: noopAsync,
     removeSelected: noopAsync,
     downloadSelected: noop,

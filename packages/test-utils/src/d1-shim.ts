@@ -56,8 +56,17 @@ export class D1Shim {
     this.db.exec(sql);
   }
 
-  batch<Statement>(statements: ReadonlyArray<Statement>): Statement[] {
-    return [...statements];
+  async batch(statements: ReadonlyArray<{ all: () => Promise<{ results: unknown[] }> }>) {
+    this.db.exec("BEGIN");
+    try {
+      const results = [];
+      for (const statement of statements) results.push(await statement.all());
+      this.db.exec("COMMIT");
+      return results;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
   }
 }
 
