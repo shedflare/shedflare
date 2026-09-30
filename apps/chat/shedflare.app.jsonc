@@ -13,14 +13,14 @@
       "from": "appUrl",
       "description": "Public URL of this chat app",
     },
-    "AUTH_ISSUER_URL": {
+    "AUTH_URL": {
       "from": "appUrl",
       "app": "auth",
-      "description": "Auth issuer URL",
+      "description": "Auth browser login URL",
     },
     "AUTH_CLIENT_ID": {
       "from": "appId",
-      "description": "OAuth client ID for this app",
+      "description": "Session client ID for this app",
     },
     "DEFAULT_MODEL_ID": {
       "from": "user",
@@ -47,6 +47,7 @@
     },
   },
   "resources": [
+    { "type": "service", "binding": "AUTH", "app": "auth" },
     {
       "type": "r2",
       "binding": "UPLOADS",

@@ -147,7 +147,7 @@ export async function createChatBackup(
 export async function handleChatBackup(request: Request): Promise<Response> {
   // SAFETY: This route is installed only in the Chat worker, whose binding contract extends AppEnv.
   const env = getRuntimeEnv() as ChatBackupEnv;
-  await requireSession(request, env, { refresh: false });
+  await requireSession(request, env);
   if (request.method === "POST") return Response.json(await createChatBackup(env));
   if (request.method === "GET") {
     return Response.json({ backups: await listChatBackups(env.UPLOADS) });
@@ -159,7 +159,7 @@ export async function handleChatBackupDownload(request: Request): Promise<Respon
   if (request.method !== "GET") return new Response("Method not allowed", { status: 405 });
   // SAFETY: This route is installed only in the Chat worker, whose binding contract extends AppEnv.
   const env = getRuntimeEnv() as ChatBackupEnv;
-  await requireSession(request, env, { refresh: false });
+  await requireSession(request, env);
   const key = new URL(request.url).searchParams.get("key") ?? "";
   if (!isAllowedChatBackupKey(key)) return new Response("Backup not found", { status: 404 });
   const object = await env.UPLOADS.get(key);
@@ -181,7 +181,7 @@ export async function handleChatBackupRestore(request: Request): Promise<Respons
   if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
   // SAFETY: This route is installed only in the Chat worker, whose binding contract extends AppEnv.
   const env = getRuntimeEnv() as ChatBackupEnv;
-  await requireSession(request, env, { refresh: false });
+  await requireSession(request, env);
   const body = Schema.decodeUnknownSync(RestoreRequestSchema)(await request.json());
   const backup = await readChatBackup(env.UPLOADS, body.key);
 

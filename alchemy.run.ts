@@ -57,11 +57,24 @@ export default Alchemy.Stack(
     const stage = yield* Alchemy.Stage;
     const credentials = yield* yield* CloudflareEnvironment;
     const { accountId } = credentials;
-    const selectedApps = Shedflare.selectedAppIds(Shedflare.loadShedflareConfig())
+    const rootConfig = Shedflare.loadShedflareConfig();
+    const selectedApps = Shedflare.selectedAppIds(rootConfig)
       .filter(Shedflare.isAppId)
       .filter((appId) => appId !== "drive");
     const selected = new Set(selectedApps);
+    const catalog = Shedflare.discoverManifests(Shedflare.findRepoRoot());
+    if (
+      selectedApps.some(
+        (appId) => Shedflare.resolveDeploymentStage(rootConfig, catalog, appId, stage) !== stage,
+      )
+    ) {
+      throw new Error(
+        "Legacy production stages require individual app deployments to preserve ownership.",
+      );
+    }
 
+    // App stacks bind AUTH to their configured Worker by physical name. The RPC
+    // cutover requires deploying Auth before its consuming apps.
     const auth = yield* whenSelected(selected, "auth", AuthStack);
     const anki = yield* whenSelected(selected, "anki", AnkiStack);
     const cfBill = yield* whenSelected(selected, "cf-bill", CfBillStack);

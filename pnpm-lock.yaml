@@ -99,6 +99,9 @@ catalogs:
     marked-highlight:
       specifier: ^2.2.4
       version: 2.2.4
+    miniflare:
+      specifier: 4.20260603.0
+      version: 4.20260603.0
     openai:
       specifier: ^6.41.0
       version: 6.49.0
@@ -136,6 +139,9 @@ overrides:
   vite: npm:@voidzero-dev/vite-plus-core@0.1.24
   vitest: npm:@voidzero-dev/vite-plus-test@0.1.24
 
+patchedDependencies:
+  alchemy@2.0.0-beta.59: fb21f0b18d568e8e20156bd3c98bc550963e925abb3cd28f55b93ffd4e77d897
+
 importers:
 
   .:
@@ -157,7 +163,7 @@ importers:
         version: 24.13.0
       alchemy:
         specifier: 'catalog:'
-        version: 2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.0)
+        version: 2.0.0-beta.59(patch_hash=fb21f0b18d568e8e20156bd3c98bc550963e925abb3cd28f55b93ffd4e77d897)(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.0)
       alchemy-vitest:
         specifier: npm:vitest@^4.1.8
         version: vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1)
@@ -213,6 +219,9 @@ importers:
       '@shedflare/alchemy':
         specifier: workspace:*
         version: link:../../packages/shedflare-alchemy
+      '@shedflare/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@shedflare/test-utils':
         specifier: workspace:*
         version: link:../../packages/test-utils
@@ -224,7 +233,7 @@ importers:
         version: 7.0.0-dev.20260421.2
       alchemy:
         specifier: 'catalog:'
-        version: 2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260603.1)(ws@8.21.1)
+        version: 2.0.0-beta.59(patch_hash=fb21f0b18d568e8e20156bd3c98bc550963e925abb3cd28f55b93ffd4e77d897)(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260603.1)(ws@8.21.1)
       drizzle-kit:
         specifier: 1.0.0-rc.4
         version: 1.0.0-rc.4
@@ -251,13 +260,16 @@ importers:
     dependencies:
       '@openauthjs/openauth':
         specifier: ^0.4.3
-        version: 0.4.3(arctic@2.3.4)(hono@4.12.23)
+        version: 0.4.3(arctic@2.3.4)(hono@4.13.8)
       '@shedflare/alchemy':
         specifier: workspace:*
         version: link:../../packages/shedflare-alchemy
-      jose:
-        specifier: 'catalog:'
-        version: 6.2.3
+      '@shedflare/auth-client':
+        specifier: workspace:*
+        version: link:../../packages/auth-client
+      drizzle-orm:
+        specifier: 1.0.0-rc.4
+        version: 1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3)
       valibot:
         specifier: 'catalog:'
         version: 1.4.2(typescript@6.0.3)
@@ -273,13 +285,22 @@ importers:
         version: 7.0.0-dev.20260421.2
       alchemy:
         specifier: 'catalog:'
-        version: 2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(vitest@4.1.8(@types/node@24.13.0)(jsdom@29.1.1)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(workerd@1.20260730.1)(ws@8.21.1)
+        version: 2.0.0-beta.59(patch_hash=fb21f0b18d568e8e20156bd3c98bc550963e925abb3cd28f55b93ffd4e77d897)(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(vitest@4.1.8(@types/node@24.13.0)(jsdom@29.1.1)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(workerd@1.20260730.1)(ws@8.21.1)
+      drizzle-kit:
+        specifier: 1.0.0-rc.4
+        version: 1.0.0-rc.4
       effect:
         specifier: 'catalog:'
         version: 4.0.0-beta.92
+      jose:
+        specifier: 'catalog:'
+        version: 6.2.3
       jsonc-parser:
         specifier: 'catalog:'
         version: 3.3.1
+      miniflare:
+        specifier: 'catalog:'
+        version: 4.20260603.0
       vite-plus:
         specifier: 'catalog:'
         version: 0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(jsdom@29.1.1)(typescript@6.0.3)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(yaml@2.9.0)
@@ -314,6 +335,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: 'catalog:'
         version: 4.20260702.1
+      '@shedflare/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.0
@@ -322,7 +346,7 @@ importers:
         version: 7.0.0-dev.20260421.2
       alchemy:
         specifier: 'catalog:'
-        version: 2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(vitest@4.1.8(@types/node@24.13.0)(jsdom@29.1.1)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(workerd@1.20260730.1)(ws@8.21.1)
+        version: 2.0.0-beta.59(patch_hash=fb21f0b18d568e8e20156bd3c98bc550963e925abb3cd28f55b93ffd4e77d897)(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(vitest@4.1.8(@types/node@24.13.0)(jsdom@29.1.1)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(workerd@1.20260730.1)(ws@8.21.1)
       effect:
         specifier: 'catalog:'
         version: 4.0.0-beta.92
@@ -350,9 +374,6 @@ importers:
       '@effect/sql-sqlite-do':
         specifier: 'catalog:'
         version: 4.0.0-beta.92(effect@4.0.0-beta.92)
-      '@openauthjs/openauth':
-        specifier: ^0.4.3
-        version: 0.4.3(arctic@2.3.4)(hono@4.12.23)
       '@shedflare/alchemy':
         specifier: workspace:*
         version: link:../../packages/shedflare-alchemy
@@ -407,9 +428,6 @@ importers:
       highlight.js:
         specifier: 'catalog:'
         version: 11.11.1
-      jose:
-        specifier: 'catalog:'
-        version: 6.2.3
       marked:
         specifier: 'catalog:'
         version: 17.0.6
@@ -438,6 +456,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: 'catalog:'
         version: 4.20260702.1
+      '@shedflare/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.0
@@ -446,7 +467,7 @@ importers:
         version: 7.0.0-dev.20260421.2
       alchemy:
         specifier: 'catalog:'
-        version: 2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@3.25.76))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.1)
+        version: 2.0.0-beta.59(patch_hash=fb21f0b18d568e8e20156bd3c98bc550963e925abb3cd28f55b93ffd4e77d897)(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@3.25.76))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.1)
       drizzle-kit:
         specifier: 1.0.0-rc.4
         version: 1.0.0-rc.4
@@ -492,7 +513,7 @@ importers:
         version: 7.0.0-dev.20260421.2
       alchemy:
         specifier: 'catalog:'
-        version: 2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.1)
+        version: 2.0.0-beta.59(patch_hash=fb21f0b18d568e8e20156bd3c98bc550963e925abb3cd28f55b93ffd4e77d897)(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.1)
       effect:
         specifier: 'catalog:'
         version: 4.0.0-beta.92
@@ -548,6 +569,9 @@ importers:
       '@playwright/test':
         specifier: ^1.60.0
         version: 1.60.0
+      '@shedflare/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@shedflare/test-utils':
         specifier: workspace:*
         version: link:../../packages/test-utils
@@ -562,7 +586,7 @@ importers:
         version: 7.0.0-dev.20260421.2
       alchemy:
         specifier: 'catalog:'
-        version: 2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.1)
+        version: 2.0.0-beta.59(patch_hash=fb21f0b18d568e8e20156bd3c98bc550963e925abb3cd28f55b93ffd4e77d897)(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.1)
       drizzle-kit:
         specifier: 1.0.0-rc.4
         version: 1.0.0-rc.4
@@ -618,6 +642,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: 'catalog:'
         version: 4.20260702.1
+      '@shedflare/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.0
@@ -626,7 +653,7 @@ importers:
         version: 7.0.0-dev.20260421.2
       alchemy:
         specifier: 'catalog:'
-        version: 2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.1)
+        version: 2.0.0-beta.59(patch_hash=fb21f0b18d568e8e20156bd3c98bc550963e925abb3cd28f55b93ffd4e77d897)(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.1)
       drizzle-kit:
         specifier: 1.0.0-rc.4
         version: 1.0.0-rc.4
@@ -700,6 +727,9 @@ importers:
       '@playwright/test':
         specifier: ^1.60.0
         version: 1.60.0
+      '@shedflare/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@shedflare/test-utils':
         specifier: workspace:*
         version: link:../../packages/test-utils
@@ -714,7 +744,7 @@ importers:
         version: 7.0.0-dev.20260421.2
       alchemy:
         specifier: 'catalog:'
-        version: 2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.1)
+        version: 2.0.0-beta.59(patch_hash=fb21f0b18d568e8e20156bd3c98bc550963e925abb3cd28f55b93ffd4e77d897)(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.1)
       drizzle-kit:
         specifier: 1.0.0-rc.4
         version: 1.0.0-rc.4
@@ -766,7 +796,7 @@ importers:
         version: 7.0.0-dev.20260421.2
       alchemy:
         specifier: 'catalog:'
-        version: 2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(vitest@4.1.8(@types/node@24.13.0)(jsdom@29.1.1)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(workerd@1.20260730.1)(ws@8.21.1)
+        version: 2.0.0-beta.59(patch_hash=fb21f0b18d568e8e20156bd3c98bc550963e925abb3cd28f55b93ffd4e77d897)(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(vitest@4.1.8(@types/node@24.13.0)(jsdom@29.1.1)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(workerd@1.20260730.1)(ws@8.21.1)
       drizzle-kit:
         specifier: 1.0.0-rc.4
         version: 1.0.0-rc.4
@@ -836,7 +866,7 @@ importers:
         version: 7.0.0-dev.20260421.2
       alchemy:
         specifier: 'catalog:'
-        version: 2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.1)
+        version: 2.0.0-beta.59(patch_hash=fb21f0b18d568e8e20156bd3c98bc550963e925abb3cd28f55b93ffd4e77d897)(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.1)
       drizzle-kit:
         specifier: 1.0.0-rc.4
         version: 1.0.0-rc.4
@@ -892,6 +922,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: 'catalog:'
         version: 4.20260702.1
+      '@shedflare/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.0
@@ -900,7 +933,7 @@ importers:
         version: 7.0.0-dev.20260421.2
       alchemy:
         specifier: 'catalog:'
-        version: 2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.1)
+        version: 2.0.0-beta.59(patch_hash=fb21f0b18d568e8e20156bd3c98bc550963e925abb3cd28f55b93ffd4e77d897)(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.1)
       drizzle-kit:
         specifier: 1.0.0-rc.4
         version: 1.0.0-rc.4
@@ -928,15 +961,9 @@ importers:
 
   packages/auth-client:
     dependencies:
-      '@openauthjs/openauth':
-        specifier: ^0.4.3
-        version: 0.4.3(arctic@2.3.4)(hono@4.12.23)
       effect:
         specifier: 'catalog:'
         version: 4.0.0-beta.92
-      jose:
-        specifier: 'catalog:'
-        version: 6.2.3
       valibot:
         specifier: 'catalog:'
         version: 1.4.2(typescript@6.0.3)
@@ -965,6 +992,9 @@ importers:
       '@shedflare/alchemy':
         specifier: workspace:*
         version: link:../shedflare-alchemy
+      '@shedflare/auth-client':
+        specifier: workspace:*
+        version: link:../auth-client
       '@shedflare/core':
         specifier: workspace:*
         version: link:../shedflare-core
@@ -1032,7 +1062,7 @@ importers:
         version: link:../shedflare-core
       alchemy:
         specifier: 'catalog:'
-        version: 2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-test@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(jsdom@29.1.1)(typescript@6.0.3)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(workerd@1.20260730.1)(ws@8.21.0)
+        version: 2.0.0-beta.59(patch_hash=fb21f0b18d568e8e20156bd3c98bc550963e925abb3cd28f55b93ffd4e77d897)(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-test@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(jsdom@29.1.1)(typescript@6.0.3)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(workerd@1.20260730.1)(ws@8.21.0)
       effect:
         specifier: 'catalog:'
         version: 4.0.0-beta.92
@@ -1178,7 +1208,7 @@ importers:
         version: 7.0.0-dev.20260421.2
       alchemy:
         specifier: 'catalog:'
-        version: 2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.1)
+        version: 2.0.0-beta.59(patch_hash=fb21f0b18d568e8e20156bd3c98bc550963e925abb3cd28f55b93ffd4e77d897)(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.1)
       effect:
         specifier: 'catalog:'
         version: 4.0.0-beta.92
@@ -3206,8 +3236,20 @@ packages:
     cpu: [arm64]
     os: [android]
 
+  '@rolldown/binding-android-arm64@1.2.6':
+    resolution: {integrity: sha512-lkWU8ZJaRk9q3CIEY1Tc7vIFALp3Xw5NfGJo2hQg5oIqNgxWi1zI+IiDEK3r70BF5Dzol1tcXsnzsRc8NLhG+Q==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [android]
+
   '@rolldown/binding-darwin-arm64@1.0.1':
     resolution: {integrity: sha512-cKnAhWEsV7TPcA/5EAteDp6KcJZBQ2G+BqE7zayMMi7kMvwRsbv7WT9aOnn0WNl4SKEIf43vjS31iUPu80nzXg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@rolldown/binding-darwin-arm64@1.2.6':
+    resolution: {integrity: sha512-dgR56NYnvAszm7Ob1B2/Vn0e8bUQYZH2UjVaMMtMVOCKFSfjhfLmuA/9+O+F+ajUdG6B/bSssrKW6JJYASa8jA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [darwin]
@@ -3218,8 +3260,20 @@ packages:
     cpu: [x64]
     os: [darwin]
 
+  '@rolldown/binding-darwin-x64@1.2.6':
+    resolution: {integrity: sha512-vpVxFvUCFioJqug7OTvqptkc4yb8UX0AwfDmJpaR/0sWz+BUmqSVAf7c8JkUgnN8YLspb4a/N6NhTyMAmdyQ7Q==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [x64]
+    os: [darwin]
+
   '@rolldown/binding-freebsd-x64@1.0.1':
     resolution: {integrity: sha512-z/oBsREo46SsFqBwYtFe0kpJeBijAT48O/WXLI4suiCLBkr03RTtTJMCzSdDd2znlh8VJizL09XVkQgk8IZonw==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [x64]
+    os: [freebsd]
+
+  '@rolldown/binding-freebsd-x64@1.2.6':
+    resolution: {integrity: sha512-h1wG6Y6K3JlRswxsI64qQJqBAy4vrLuHgRbc8CZMGSWTOFRY6ghMApM1NKzB2I0n5xV1fjkE18SuVl2QpLeNpA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [freebsd]
@@ -3230,8 +3284,21 @@ packages:
     cpu: [arm]
     os: [linux]
 
+  '@rolldown/binding-linux-arm-gnueabihf@1.2.6':
+    resolution: {integrity: sha512-tbCiqub0q2MVWJKgF5PoAlNWCtQydiOYSLIkd8sByqK/6MMYLJRcSXSYodqYtd0O+Fw7QaVmKKlS4oL94YRZ0w==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm]
+    os: [linux]
+
   '@rolldown/binding-linux-arm64-gnu@1.0.1':
     resolution: {integrity: sha512-QoSx2EkyrrdZ6kcyE8stqZ62t0Yra8Fs5ia9lOxJrh6TMQJK7gQKmscdTHf7pOXKREKrVwOtJcQG3qVSfc866A==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@rolldown/binding-linux-arm64-gnu@1.2.6':
+    resolution: {integrity: sha512-oxK9+baEBPhZG5HB4URY+uU04zJWeZlH6Tb9rB5DK4DF9XR1uXNLXt5Q5ZsugTKayNCNLhkcwz/ye74hRI98dg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [linux]
@@ -3244,6 +3311,13 @@ packages:
     os: [linux]
     libc: [musl]
 
+  '@rolldown/binding-linux-arm64-musl@1.2.6':
+    resolution: {integrity: sha512-muWCk27FVBEZtv0MsK8gnfSmgczA8KQ0uRVJbTABKhkRfQc38aUrcb7fhi3BNiyseFmgcRsoMfQsSNJ+DbZdSw==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
   '@rolldown/binding-linux-ppc64-gnu@1.0.1':
     resolution: {integrity: sha512-zY1bul7OWr7DFBiJ++wofXvnr8B45ce3QsQUhKrIhXsygAh7bTkwyeM1bi1a2g5C/yC/N8TZyGDEoMfm/l9mpg==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -3251,8 +3325,22 @@ packages:
     os: [linux]
     libc: [glibc]
 
+  '@rolldown/binding-linux-ppc64-gnu@1.2.6':
+    resolution: {integrity: sha512-eWDoSfU7Co2qj3vgB3Dt4lj1mG6CoWbcJQkRMP3XJplyCMtuaq3LHvPFjS9QIPvMGWVadJC04Xiy0IdcVPtnwQ==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [ppc64]
+    os: [linux]
+    libc: [glibc]
+
   '@rolldown/binding-linux-s390x-gnu@1.0.1':
     resolution: {integrity: sha512-0frlsT/f4Ft6I7SMESTKnF3cZsdicQn1dCMkF/jT9wDLE+gGoiQfv1nmT9e+s7s/fekvvy6tZM2jHvI2tkbJDQ==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [s390x]
+    os: [linux]
+    libc: [glibc]
+
+  '@rolldown/binding-linux-s390x-gnu@1.2.6':
+    resolution: {integrity: sha512-2bWNjRSIayvupRKxXUY2tWG9fYdoUlTqWywHRvE8Eq3GvuQ+f2HeIkve697fIt+IQs/PV8yFsdWuhp1aJ1PdnA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [s390x]
     os: [linux]
@@ -3279,8 +3367,21 @@ packages:
     os: [linux]
     libc: [musl]
 
+  '@rolldown/binding-linux-x64-musl@1.2.6':
+    resolution: {integrity: sha512-TvtPnfVr+HtyGiDmPK4VWmlNm7QhNNAcK5Q9A7aOXsI8545yCyaoMaicXrFZ72JzeYjaUVk7yT243zT0jzjFKQ==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
   '@rolldown/binding-openharmony-arm64@1.0.1':
     resolution: {integrity: sha512-/Mh0Zhq3OP7fVs0kcQHZP6lZEthMGTaSf8UBQYSFEZDWGXXlEC+nJ6EqenaK2t4LBXMe3A+K/G2BVXXdtOr4PQ==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [openharmony]
+
+  '@rolldown/binding-openharmony-arm64@1.2.6':
+    resolution: {integrity: sha512-iOo0VEay2XFhaCcH0sps5XIimkSuOnNaZrf6+ZkoSOQBJPKNU48RkmJv0/lSpipexu5P+ouFgafe5IGr/DiQfg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [openharmony]
@@ -3296,8 +3397,20 @@ packages:
     cpu: [arm64]
     os: [win32]
 
+  '@rolldown/binding-win32-arm64-msvc@1.2.6':
+    resolution: {integrity: sha512-y5NTmmasMS455JlOCO4ZM9krIchv3Mvm1crL1iUPGOPgEzSkves9n0SdC5Sjz6+qWDFhd8/JpfWMH8NSWNHe+A==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [win32]
+
   '@rolldown/binding-win32-x64-msvc@1.0.1':
     resolution: {integrity: sha512-INAycaWuhlOK3wk4mRHGsdgwYWmd9cChdPdE9bwWmy6rn9VqVNYNFGhOdXrofXUxwHIncSiPNb8tNm8knDVIeQ==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [x64]
+    os: [win32]
+
+  '@rolldown/binding-win32-x64-msvc@1.2.6':
+    resolution: {integrity: sha512-np8iZSLfXlAD4kWhiyq/u0Yt8oZDtRQ8lGhQaCXo2rl37KNjeU0GjJuwr4P3oeZ++ROfofsKNBqR5LTO8aXyWQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [win32]
@@ -4761,8 +4874,8 @@ packages:
     resolution: {integrity: sha512-Xwwo44whKBVCYoliBQwaPvtd/2tYFkRQtXDWj1nackaV2JPXx3L0+Jvd8/qCJ2p+ML0/XVkJ2q+Mr+UVdpJK5w==}
     engines: {node: '>=12.0.0'}
 
-  hono@4.12.23:
-    resolution: {integrity: sha512-eIaZ9qDgu7XV0pxOCrg7/WhnQ6Ivm22UcxhXx/A3dcbqbbYgBEkc6e/J/s7j2tS96zoB0S9VBdLwQNCWwUo4LA==}
+  hono@4.13.8:
+    resolution: {integrity: sha512-/Gng7NfoykZl2pjukW5Z6+8Yxm3BPRf86GTbQnt0SbySkvax4fyL4H3HhY1cCpBGmiW9XDRFzRV+CXK2W8QudQ==}
     engines: {node: '>=16.9.0'}
 
   html-encoding-sniffer@6.0.0:
@@ -7567,12 +7680,12 @@ snapshots:
       '@octokit/request-error': 7.1.0
       '@octokit/webhooks-methods': 6.0.0
 
-  '@openauthjs/openauth@0.4.3(arctic@2.3.4)(hono@4.12.23)':
+  '@openauthjs/openauth@0.4.3(arctic@2.3.4)(hono@4.13.8)':
     dependencies:
       '@standard-schema/spec': 1.0.0-beta.3
       arctic: 2.3.4
       aws4fetch: 1.0.20
-      hono: 4.12.23
+      hono: 4.13.8
       jose: 5.9.6
 
   '@oslojs/asn1@1.0.0':
@@ -7835,28 +7948,55 @@ snapshots:
   '@rolldown/binding-android-arm64@1.0.1':
     optional: true
 
+  '@rolldown/binding-android-arm64@1.2.6':
+    optional: true
+
   '@rolldown/binding-darwin-arm64@1.0.1':
+    optional: true
+
+  '@rolldown/binding-darwin-arm64@1.2.6':
     optional: true
 
   '@rolldown/binding-darwin-x64@1.0.1':
     optional: true
 
+  '@rolldown/binding-darwin-x64@1.2.6':
+    optional: true
+
   '@rolldown/binding-freebsd-x64@1.0.1':
+    optional: true
+
+  '@rolldown/binding-freebsd-x64@1.2.6':
     optional: true
 
   '@rolldown/binding-linux-arm-gnueabihf@1.0.1':
     optional: true
 
+  '@rolldown/binding-linux-arm-gnueabihf@1.2.6':
+    optional: true
+
   '@rolldown/binding-linux-arm64-gnu@1.0.1':
+    optional: true
+
+  '@rolldown/binding-linux-arm64-gnu@1.2.6':
     optional: true
 
   '@rolldown/binding-linux-arm64-musl@1.0.1':
     optional: true
 
+  '@rolldown/binding-linux-arm64-musl@1.2.6':
+    optional: true
+
   '@rolldown/binding-linux-ppc64-gnu@1.0.1':
     optional: true
 
+  '@rolldown/binding-linux-ppc64-gnu@1.2.6':
+    optional: true
+
   '@rolldown/binding-linux-s390x-gnu@1.0.1':
+    optional: true
+
+  '@rolldown/binding-linux-s390x-gnu@1.2.6':
     optional: true
 
   '@rolldown/binding-linux-x64-gnu@1.0.1':
@@ -7868,7 +8008,13 @@ snapshots:
   '@rolldown/binding-linux-x64-musl@1.0.1':
     optional: true
 
+  '@rolldown/binding-linux-x64-musl@1.2.6':
+    optional: true
+
   '@rolldown/binding-openharmony-arm64@1.0.1':
+    optional: true
+
+  '@rolldown/binding-openharmony-arm64@1.2.6':
     optional: true
 
   '@rolldown/binding-wasm32-wasi@1.0.1':
@@ -7881,7 +8027,13 @@ snapshots:
   '@rolldown/binding-win32-arm64-msvc@1.0.1':
     optional: true
 
+  '@rolldown/binding-win32-arm64-msvc@1.2.6':
+    optional: true
+
   '@rolldown/binding-win32-x64-msvc@1.0.1':
+    optional: true
+
+  '@rolldown/binding-win32-x64-msvc@1.2.6':
     optional: true
 
   '@rolldown/pluginutils@1.0.1': {}
@@ -8615,7 +8767,7 @@ snapshots:
 
   agent-base@7.1.4: {}
 
-  alchemy@2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@3.25.76))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.1):
+  alchemy@2.0.0-beta.59(patch_hash=fb21f0b18d568e8e20156bd3c98bc550963e925abb3cd28f55b93ffd4e77d897)(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@3.25.76))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.1):
     dependencies:
       '@alchemy.run/node-utils': 0.0.5
       '@aws-sdk/credential-providers': 3.1062.0
@@ -8670,7 +8822,7 @@ snapshots:
       - vitest
       - workerd
 
-  alchemy@2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260603.1)(ws@8.21.1):
+  alchemy@2.0.0-beta.59(patch_hash=fb21f0b18d568e8e20156bd3c98bc550963e925abb3cd28f55b93ffd4e77d897)(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260603.1)(ws@8.21.1):
     dependencies:
       '@alchemy.run/node-utils': 0.0.5
       '@aws-sdk/credential-providers': 3.1062.0
@@ -8725,7 +8877,7 @@ snapshots:
       - vitest
       - workerd
 
-  alchemy@2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.0):
+  alchemy@2.0.0-beta.59(patch_hash=fb21f0b18d568e8e20156bd3c98bc550963e925abb3cd28f55b93ffd4e77d897)(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.0):
     dependencies:
       '@alchemy.run/node-utils': 0.0.5
       '@aws-sdk/credential-providers': 3.1062.0
@@ -8780,7 +8932,7 @@ snapshots:
       - vitest
       - workerd
 
-  alchemy@2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.1):
+  alchemy@2.0.0-beta.59(patch_hash=fb21f0b18d568e8e20156bd3c98bc550963e925abb3cd28f55b93ffd4e77d897)(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vitest@4.1.8(@types/node@24.13.0)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(jsdom@29.1.1))(workerd@1.20260730.1)(ws@8.21.1):
     dependencies:
       '@alchemy.run/node-utils': 0.0.5
       '@aws-sdk/credential-providers': 3.1062.0
@@ -8835,7 +8987,7 @@ snapshots:
       - vitest
       - workerd
 
-  alchemy@2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-test@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(jsdom@29.1.1)(typescript@6.0.3)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(workerd@1.20260730.1)(ws@8.21.0):
+  alchemy@2.0.0-beta.59(patch_hash=fb21f0b18d568e8e20156bd3c98bc550963e925abb3cd28f55b93ffd4e77d897)(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(@voidzero-dev/vite-plus-test@0.1.24(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(jsdom@29.1.1)(typescript@6.0.3)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(yaml@2.9.0))(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(workerd@1.20260730.1)(ws@8.21.0):
     dependencies:
       '@alchemy.run/node-utils': 0.0.5
       '@aws-sdk/credential-providers': 3.1062.0
@@ -8890,7 +9042,7 @@ snapshots:
       - vitest
       - workerd
 
-  alchemy@2.0.0-beta.59(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(vitest@4.1.8(@types/node@24.13.0)(jsdom@29.1.1)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(workerd@1.20260730.1)(ws@8.21.1):
+  alchemy@2.0.0-beta.59(patch_hash=fb21f0b18d568e8e20156bd3c98bc550963e925abb3cd28f55b93ffd4e77d897)(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1))(@types/node@24.13.0)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@effect/sql-d1@4.0.0-beta.92(effect@4.0.0-beta.92))(@effect/sql-sqlite-do@4.0.0-beta.92(effect@4.0.0-beta.92))(@libsql/client@0.17.3)(effect@4.0.0-beta.92)(mysql2@3.22.4(@types/node@24.13.0))(pg@8.21.0)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3))(effect@4.0.0-beta.92)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(vitest@4.1.8(@types/node@24.13.0)(jsdom@29.1.1)(vite@8.2.2(@types/node@24.13.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(workerd@1.20260730.1)(ws@8.21.1):
     dependencies:
       '@alchemy.run/node-utils': 0.0.5
       '@aws-sdk/credential-providers': 3.1062.0
@@ -9681,7 +9833,7 @@ snapshots:
 
   highlight.js@11.11.1: {}
 
-  hono@4.12.23: {}
+  hono@4.13.8: {}
 
   html-encoding-sniffer@6.0.0:
     dependencies:
@@ -10599,7 +10751,20 @@ snapshots:
       '@rolldown/pluginutils': 1.0.1
     optionalDependencies:
       '@rolldown/binding-android-arm-eabi': 1.2.6
+      '@rolldown/binding-android-arm64': 1.2.6
+      '@rolldown/binding-darwin-arm64': 1.2.6
+      '@rolldown/binding-darwin-x64': 1.2.6
+      '@rolldown/binding-freebsd-x64': 1.2.6
+      '@rolldown/binding-linux-arm-gnueabihf': 1.2.6
+      '@rolldown/binding-linux-arm64-gnu': 1.2.6
+      '@rolldown/binding-linux-arm64-musl': 1.2.6
+      '@rolldown/binding-linux-ppc64-gnu': 1.2.6
+      '@rolldown/binding-linux-s390x-gnu': 1.2.6
       '@rolldown/binding-linux-x64-gnu': 1.2.6
+      '@rolldown/binding-linux-x64-musl': 1.2.6
+      '@rolldown/binding-openharmony-arm64': 1.2.6
+      '@rolldown/binding-win32-arm64-msvc': 1.2.6
+      '@rolldown/binding-win32-x64-msvc': 1.2.6
 
   run-async@3.0.0: {}
 

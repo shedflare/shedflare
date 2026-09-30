@@ -38,6 +38,7 @@ const LegacyResourceFields = {
 };
 
 export const ResourceDescriptorSchema = variant("type", [
+  strictObject({ type: literal("service"), binding: EnvNameSchema, app: AppIdSchema }),
   strictObject({ type: literal("kv"), ...LegacyResourceFields }),
   strictObject({ type: literal("d1"), ...LegacyResourceFields }),
   strictObject({ type: literal("r2"), ...LegacyResourceFields }),

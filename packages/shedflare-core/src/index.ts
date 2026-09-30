@@ -18,6 +18,7 @@ export {
   migrateConfig,
   patchConfig,
   resolveAppConfig,
+  resolveDeploymentStage,
   selectedAppIds,
   stageSubdomain,
   validateConfig,

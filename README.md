@@ -25,7 +25,7 @@ tooling.
 | App           | Source                                     | Description                                            |
 | ------------- | ------------------------------------------ | ------------------------------------------------------ |
 | Anki          | [`apps/anki`](apps/anki)                   | Spaced-repetition cards and review                     |
-| Auth          | [`apps/auth`](apps/auth)                   | Optional shared OAuth2/OIDC provider                   |
+| Auth          | [`apps/auth`](apps/auth)                   | Shared owner sessions over Worker RPC                  |
 | CF Bill       | [`apps/cf-bill`](apps/cf-bill)             | Cloudflare usage and plan-limit dashboard              |
 | Chat          | [`apps/chat`](apps/chat)                   | AI chat with browser automation and synchronized state |
 | Discord       | [`apps/discord`](apps/discord)             | Personal Discord bot                                   |
@@ -118,8 +118,9 @@ change. Those operations require explicit approval.
 
 ## CLI and console
 
-The `shedflare` CLI provides configuration, deployment, secret, and diagnostic commands. The local
-Console is the human-facing control plane:
+The `shedflare` CLI provides configuration, deployment, secret, diagnostic, and read-only agent
+inspection commands. See [agent login and deployment inspection](packages/cli/README.md).
+The local Console is the human-facing control plane:
 
 ```bash
 pnpm dashboard

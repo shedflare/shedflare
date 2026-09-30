@@ -13,14 +13,14 @@
       "from": "appUrl",
       "description": "Public URL of this app",
     },
-    "AUTH_ISSUER_URL": {
+    "AUTH_URL": {
       "from": "appUrl",
       "app": "auth",
-      "description": "Auth issuer URL",
+      "description": "Auth browser login URL",
     },
     "AUTH_CLIENT_ID": {
       "from": "appId",
-      "description": "OAuth client ID for this app",
+      "description": "Session client ID for this app",
     },
     "OWNER_EMAIL": {
       "from": "ownerEmail",
@@ -41,5 +41,5 @@
       "required": true,
     },
   },
-  "resources": [],
+  "resources": [{ "type": "service", "binding": "AUTH", "app": "auth" }],
 }

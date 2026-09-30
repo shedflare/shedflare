@@ -8,7 +8,13 @@ export {
   requireVar,
   stageSubdomain,
 } from "./config.ts";
-export { discoverManifests, findRepoRoot, isAppId, selectedAppIds } from "@shedflare/core";
+export {
+  discoverManifests,
+  findRepoRoot,
+  isAppId,
+  resolveDeploymentStage,
+  selectedAppIds,
+} from "@shedflare/core";
 export {
   CfApiError,
   type CfCredentials,
@@ -23,7 +29,7 @@ export { resolveE2eAuthBindings, type E2eAuthBindings } from "./e2e-auth.ts";
 export { optionalSecretConfig } from "./optional-secret-config.ts";
 export { physicalName } from "./physical-name.ts";
 export { providers, ShedflareProviders } from "./providers.ts";
-export { appConfig, authIssuerUrl } from "./stack-env.ts";
+export { appConfig, authUrl, bindAuth } from "./stack-env.ts";
 export {
   WorkerSecret,
   WorkerSecretProvider,

@@ -10,23 +10,28 @@
     "directory": "apps/auth"
   },
   "type": "module",
+  "exports": {
+    "./stack": "./alchemy.run.ts"
+  },
   "scripts": {
     "dev": "vp exec wrangler dev src/worker.ts",
     "build": "vp check --no-fmt --no-lint",
     "test": "vp test",
-    "check": "vp check src alchemy.run.ts alchemy.test.ts allowed-clients.ts allowed-clients.test.ts",
+    "check": "vp check src alchemy.run.ts alchemy.test.ts allowed-clients.ts allowed-clients.test.ts auth.test.ts drizzle.config.ts",
     "typecheck": "vp check --no-fmt --no-lint",
     "plan": "pnpm --dir ../.. exec alchemy plan apps/auth/alchemy.run.ts",
     "deploy": "pnpm --dir ../.. deploy:auth",
     "deploy:stage": "pnpm --dir ../.. exec alchemy deploy apps/auth/alchemy.run.ts --yes",
     "destroy": "pnpm --dir ../.. destroy:auth",
     "destroy:stage": "pnpm --dir ../.. exec alchemy destroy apps/auth/alchemy.run.ts --yes",
-    "lint": "vp lint . --max-warnings=0"
+    "lint": "vp lint . --max-warnings=0",
+    "db:generate": "vp exec drizzle-kit generate"
   },
   "dependencies": {
     "@openauthjs/openauth": "^0.4.3",
     "@shedflare/alchemy": "workspace:*",
-    "jose": "catalog:",
+    "@shedflare/auth-client": "workspace:*",
+    "drizzle-orm": "catalog:",
     "valibot": "catalog:"
   },
   "devDependencies": {
@@ -34,8 +39,11 @@
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
     "alchemy": "catalog:",
+    "drizzle-kit": "catalog:",
     "effect": "catalog:",
+    "jose": "catalog:",
     "jsonc-parser": "catalog:",
+    "miniflare": "catalog:",
     "vite-plus": "catalog:",
     "wrangler": "catalog:"
   },

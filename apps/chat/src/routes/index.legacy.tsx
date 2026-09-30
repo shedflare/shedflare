@@ -101,7 +101,6 @@ import {
 } from "../lib/draft-state";
 import { start as startConnection, isConnected } from "../lib/ws-connection";
 import { init as initSyncAdapter } from "../lib/sync-adapter";
-import { authFetch } from "../lib/auth-fetch";
 import { loadOlderThreads, loadThreadDetail } from "../lib/history";
 import { debugLog } from "../lib/client-debug";
 import { selectAutomaticModelId } from "../lib/model-selection";
@@ -516,7 +515,7 @@ const fetchBootstrap = async () => {
 
 const fetchModels = async (hasSession: boolean) => {
   if (!hasSession) return null;
-  const response = await authFetch("/api/models");
+  const response = await fetch("/api/models");
   if (!response.ok) {
     const message = await response.text().catch(() => response.statusText);
     throw new Error(message || "Failed to load models");

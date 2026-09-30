@@ -1,0 +1,14 @@
+diff --git a/src/Cloudflare/Workers/WorkerProvider.ts b/src/Cloudflare/Workers/WorkerProvider.ts
+index 5fb62b1..d2c5318 100644
+--- a/src/Cloudflare/Workers/WorkerProvider.ts
++++ b/src/Cloudflare/Workers/WorkerProvider.ts
+@@ -947,7 +947,8 @@ export const LiveWorkerProvider = () =>
+           containers:
+             metadataContainers.length > 0 ? metadataContainers : undefined,
+           keepAssets,
+-          keepBindings: undefined,
++          // Secrets have a separate lifecycle and must survive script uploads.
++          keepBindings: ["secret_text", "secret_key"],
+           limits: news.limits,
+           logpush: news.logpush,
+           mainModule: bundle.main,

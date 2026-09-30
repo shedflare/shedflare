@@ -38,7 +38,7 @@ export async function handleUploadPresign(request: Request): Promise<Response> {
       path: new URL(request.url).pathname,
     },
     run: async () => {
-      await requireSession(request, env, { refresh: false });
+      await requireSession(request, env);
       const { sizeBytes, mimeType, fileName, threadId } = await parseUploadPresignBody(request);
 
       if (!threadId) return new Response("Missing threadId", { status: 400 });

@@ -183,7 +183,18 @@ function makeTestEnv(db: D1Shim, files: R2Mock): Env {
   return {
     DB: asD1Database(db),
     FILES: asR2Bucket(files),
-    AUTH_ISSUER_URL: "https://auth.test.example.com",
+    AUTH: {
+      async validateSession() {
+        throw new Error("Unexpected Auth RPC in local test");
+      },
+      async exchangeCode() {
+        throw new Error("Unexpected Auth RPC in local test");
+      },
+      async revokeSession() {
+        throw new Error("Unexpected Auth RPC in local test");
+      },
+    },
+    AUTH_URL: "https://auth.test.example.com",
     AUTH_CLIENT_ID: "shedflare-drive-test",
     APP_PUBLIC_URL: "https://drive.test.example.com",
     SECURE_UPLOAD_TOKEN_SECRET: "test-secure-upload-token-secret-at-least-32-bytes",

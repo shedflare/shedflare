@@ -4,6 +4,8 @@ import {
   createMemo,
   createSignal,
   useContext,
+  Match,
+  Switch,
   type JSX,
 } from "solid-js";
 import { clearAuthHint, readAuthHint } from "@shedflare/auth-client/client";
@@ -76,7 +78,10 @@ export function RoutinesProvider(props: { children: JSX.Element }) {
   // immediately instead of the loading state. bootstrap() reconciles below.
   const sessionHint = readAuthHint();
   const [userEmail, setUserEmail] = createSignal(sessionHint);
-  const [loading, setLoading] = createSignal(!sessionHint);
+  const [sessionState, setSessionState] = createSignal<
+    "checking" | "authenticated" | "signed-out" | "unavailable"
+  >(sessionHint ? "authenticated" : "checking");
+  const loading = () => sessionState() === "checking";
   const [selectedDate, setSelectedDate] = createSignal(toDateStr(new Date()));
 
   const [routines, setRoutines] = createSignal<Routine[]>([]);
@@ -143,20 +148,26 @@ export function RoutinesProvider(props: { children: JSX.Element }) {
   }
 
   async function bootstrap() {
+    setSessionState("checking");
     try {
       const session = await fetch("/api/session");
-      if (!session.ok) {
+      if (session.status === 401) {
         setUserEmail("");
-        redirectToLogin();
+        clearAuthHint();
+        setSessionState("signed-out");
+        if (shouldAttemptAutoLogin()) window.location.replace("/api/auth/login?auto=1");
+        return;
+      }
+      if (!session.ok) {
+        setSessionState("unavailable");
         return;
       }
       const user = parse(SessionResponseSchema, await session.json());
       setUserEmail(user.user.email);
       await loadDay(selectedDate());
-    } catch (err) {
-      console.error("Failed to bootstrap:", err);
-    } finally {
-      setLoading(false);
+      setSessionState("authenticated");
+    } catch {
+      setSessionState("unavailable");
     }
   }
 
@@ -325,7 +336,21 @@ export function RoutinesProvider(props: { children: JSX.Element }) {
         fetchCompletions,
       }}
     >
-      {props.children}
+      <Switch fallback={props.children}>
+        <Match when={sessionState() === "signed-out"}>
+          <div class="loading">
+            <a href="/api/auth/login">Sign in with Google</a>
+          </div>
+        </Match>
+        <Match when={sessionState() === "unavailable"}>
+          <div class="loading" role="alert">
+            <p>Could not check your session.</p>
+            <button class="btn" onClick={() => void bootstrap()}>
+              Try again
+            </button>
+          </div>
+        </Match>
+      </Switch>
     </RoutinesContext.Provider>
   );
 }

@@ -8,7 +8,6 @@ import {
   type SyncServerEnvelope,
 } from "#/domain";
 import { createSignal } from "solid-js";
-import { refreshAuthSession } from "./auth-fetch";
 import * as pendingOps from "./pending-ops";
 import { debugLog } from "./client-debug";
 import * as Schema from "effect/Schema";
@@ -263,11 +262,7 @@ function scheduleReconnect() {
   if (reconnectTimer) window.clearTimeout(reconnectTimer);
   const delay = Math.min(10_000, 500 * 2 ** reconnectAttempt++);
   reconnectTimer = window.setTimeout(() => {
-    void refreshAuthSession()
-      .finally(() => connect())
-      .catch(() => {
-        console.warn("[ws] refreshAuthSession failed, connecting anyway");
-      });
+    connect();
   }, delay);
 }
 

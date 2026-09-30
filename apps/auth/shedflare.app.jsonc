@@ -2,7 +2,7 @@
   "$schema": "https://shedflare.dev/schemas/app-manifest.schema.json",
   "id": "auth",
   "name": "Shedflare Auth",
-  "description": "OAuth2/OIDC authentication provider using OpenAuth",
+  "description": "OpenAuth owner sign-in with opaque sessions and Worker RPC",
   "lifecycle": "beta",
   "category": "platform",
   "dataSensitivity": "high",
@@ -16,6 +16,11 @@
     "GOOGLE_CLIENT_ID": {
       "from": "user",
       "description": "Google OAuth client ID",
+    },
+    "CLOUDFLARE_ACCOUNT_ID": {
+      "from": "user",
+      "default": "",
+      "description": "Optional Cloudflare account ID for read-only agent deployment inspection",
     },
     "ADDITIONAL_ALLOWED_CLIENTS": {
       "from": "user",
@@ -31,13 +36,24 @@
       "description": "JSON map of allowed client IDs to their redirect URI origins (built by Alchemy stack)",
     },
   },
-  "secrets": {},
+  "secrets": {
+    "DEPLOYMENTS_CF_API_TOKEN": {
+      "description": "Optional Cloudflare API token restricted to Workers: Metadata Read-only for deployment inspection",
+      "required": false,
+    },
+  },
   "resources": [
     {
       "type": "kv",
       "binding": "OPENAUTH_STORAGE",
       "name": "shedflare-auth-storage",
       "idField": "OPENAUTH_STORAGE_ID",
+    },
+    {
+      "type": "d1",
+      "binding": "AUTH_DB",
+      "name": "shedflare-auth-db",
+      "idField": "AUTH_DB_ID",
     },
   ],
 }

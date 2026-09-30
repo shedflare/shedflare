@@ -63,7 +63,18 @@ beforeEach(async () => {
     DB,
     FILES: asR2Bucket(new R2Mock()),
     SECURE_UPLOAD_TOKEN_SECRET: "local-test-secret-at-least-32-characters",
-    AUTH_ISSUER_URL: "https://auth.example",
+    AUTH: {
+      async validateSession() {
+        throw new Error("Unexpected Auth RPC in local test");
+      },
+      async exchangeCode() {
+        throw new Error("Unexpected Auth RPC in local test");
+      },
+      async revokeSession() {
+        throw new Error("Unexpected Auth RPC in local test");
+      },
+    },
+    AUTH_URL: "https://auth.example",
     AUTH_CLIENT_ID: "drive",
     APP_PUBLIC_URL: "http://localhost",
     OWNER_EMAIL: "owner@example.com",

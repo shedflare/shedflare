@@ -4,14 +4,6 @@ import { createStructuredLogger, decodeAppEnv, type AppEnv } from "#/effect";
 import { modelCapabilityFor, type ModelCapabilitySource } from "#/server/model-capabilities";
 export { modelTransportFor } from "#/server/model-capabilities";
 import {
-  createLocalJWKSet,
-  errors as joseErrors,
-  exportJWK,
-  importSPKI,
-  jwtVerify,
-  type JWK,
-} from "jose";
-import {
   createId,
   decodeSyncSnapshot,
   type ExternalValue,
@@ -21,17 +13,8 @@ import {
 } from "#/domain";
 import * as Schema from "effect/Schema";
 import type { Browser, BrowserWorker } from "@cloudflare/puppeteer";
-import {
-  createAuthHandlers,
-  getCookie,
-  isOwnerEmail,
-  normalizeEmail,
-} from "@shedflare/auth-client/consumer";
-import { createAuthIssuer } from "./auth/issuer.js";
-
+import { createAuthHandlers } from "@shedflare/auth-client/consumer";
 export type { AppEnv } from "#/effect";
-export { subjects } from "./auth/subjects.js";
-export { createAuthIssuer } from "./auth/issuer.js";
 export { isOwnerEmail, normalizeEmail } from "@shedflare/auth-client/consumer";
 
 declare global {
@@ -93,17 +76,6 @@ type InternalCommandResponse = {
   code?: string;
 };
 
-type TokenResponse = {
-  access_token: string;
-  refresh_token: string;
-  expires_in: number;
-};
-
-const TokenResponseSchema = Schema.Struct({
-  access_token: Schema.NonEmptyString,
-  refresh_token: Schema.NonEmptyString,
-  expires_in: Schema.Number,
-});
 const InternalCommandResponseSchema = Schema.Struct({
   ok: Schema.Boolean,
   snapshot: Schema.optional(Schema.Any),
@@ -128,14 +100,6 @@ const ExaSearchResponseSchema = Schema.Struct({
   autopromptString: Schema.optional(Schema.NullOr(Schema.String)),
 });
 
-export function decodeTokenResponse(value: ExternalValue): TokenResponse | null {
-  try {
-    return Schema.decodeUnknownSync(TokenResponseSchema)(value);
-  } catch {
-    return null;
-  }
-}
-
 function decodeInternalCommandResponse(value: ExternalValue): InternalCommandResponse | null {
   try {
     const decoded = Schema.decodeUnknownSync(InternalCommandResponseSchema)(value);
@@ -156,17 +120,7 @@ function decodeExaSearchResponse(value: ExternalValue): ExaSearchResponse | null
   }
 }
 
-export type AccessSession = {
-  user: {
-    email: string;
-    name?: string;
-  };
-  tokens?: {
-    access: string;
-    refresh: string;
-    expiresIn: number;
-  };
-};
+export type AccessSession = { user: { email: string } };
 
 export function getDefaultModelId(env: Pick<AppEnv, "DEFAULT_MODEL_ID">) {
   return env.DEFAULT_MODEL_ID?.trim() || "auto";
@@ -184,304 +138,13 @@ export function setRuntimeEnv(input: Parameters<typeof decodeAppEnv>[0]) {
   return env;
 }
 
-function isLocalDevRequest(request: Request) {
-  const hostname = new URL(request.url).hostname;
-  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "0.0.0.0";
+export async function getSession(request: Request, env: AppEnv): Promise<AccessSession | null> {
+  const session = await createAuthHandlers(env).authenticate(request);
+  return session ? { user: { email: session.email } } : null;
 }
 
-// Deployed Chat delegates remote auth verification and refresh to the shared
-// auth consumer. This verifier is only for the local issuer compatibility
-// path, where Chat owns the signing keys in its local KV binding.
-const SIGNING_ALG_DEFAULT = "ES256";
-const LEGACY_SIGNING_ALG = "RS512";
-const STORAGE_KEY_SEPARATOR = String.fromCharCode(31);
-const JWKS_TTL_MS = 60 * 60 * 1000;
-const REFRESH_TIMEOUT_MS = 10_000;
-
-type StoredSigningKey = {
-  id: string;
-  publicKey: string;
-  privateKey: string;
-  alg?: string;
-  created: number;
-  expired?: number;
-};
-
-let jwksPromise: Promise<ReturnType<typeof createLocalJWKSet>> | null = null;
-let jwksLoadedAt = 0;
-
-async function loadJwks(env: AppEnv) {
-  const namespace: KVNamespace = env.OPENAUTH_STORAGE;
-  const keys: JWK[] = [];
-  for (const prefix of ["signing:key", "oauth:key"] as const) {
-    let cursor: string | undefined;
-    while (true) {
-      const list = await namespace.list({
-        prefix: `${prefix}${STORAGE_KEY_SEPARATOR}`,
-        cursor,
-      });
-      for (const item of list.keys) {
-        const stored = await namespace.get<StoredSigningKey>(item.name, "json");
-        if (!stored || stored.expired) continue;
-        const alg =
-          stored.alg ?? (prefix === "oauth:key" ? LEGACY_SIGNING_ALG : SIGNING_ALG_DEFAULT);
-        const publicKey = await importSPKI(stored.publicKey, alg, { extractable: true });
-        const jwk = await exportJWK(publicKey);
-        jwk.kid = stored.id;
-        jwk.use = "sig";
-        jwk.alg = alg;
-        keys.push(jwk);
-      }
-      if (list.list_complete) break;
-      cursor = list.cursor;
-    }
-  }
-  return createLocalJWKSet({ keys });
-}
-
-function getJwks(env: AppEnv) {
-  const fresh = jwksPromise && Date.now() - jwksLoadedAt < JWKS_TTL_MS;
-  if (!fresh) {
-    jwksLoadedAt = Date.now();
-    jwksPromise = loadJwks(env);
-  }
-  if (!jwksPromise) jwksPromise = loadJwks(env);
-  return jwksPromise;
-}
-
-function invalidateJwks() {
-  jwksPromise = null;
-  jwksLoadedAt = 0;
-}
-
-type LocalVerifyResult = { kind: "ok"; email: string } | { kind: "expired" } | { kind: "invalid" };
-
-async function verifyAccessLocally(token: string, env: AppEnv): Promise<LocalVerifyResult> {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const jwks = await getJwks(env);
-      const { payload } = await jwtVerify(token, jwks, { issuer: env.APP_PUBLIC_URL });
-      if (payload.mode !== "access") return { kind: "invalid" };
-      const properties = Schema.decodeUnknownSync(Schema.Struct({ email: Schema.NonEmptyString }))(
-        payload.properties,
-      );
-      const email = properties.email;
-      return { kind: "ok", email };
-    } catch (error) {
-      if (error instanceof joseErrors.JWTExpired) return { kind: "expired" };
-      // Signature verification can fail because keys rotated since we
-      // cached the JWKS. Drop the cache and retry once before giving up.
-      if (error instanceof joseErrors.JWSSignatureVerificationFailed && attempt === 0) {
-        invalidateJwks();
-        continue;
-      }
-      return { kind: "invalid" };
-    }
-  }
-  return { kind: "invalid" };
-}
-
-async function rotateRefreshToken(refreshToken: string, env: AppEnv) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REFRESH_TIMEOUT_MS);
-  try {
-    const tokenRequest = new Request(`${env.APP_PUBLIC_URL}/token`, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: refreshToken,
-      }),
-      signal: controller.signal,
-    });
-    const issuerEnv = Object.fromEntries(Object.entries(env));
-    class DetachedSpan {
-      readonly isTraced = false;
-      setAttribute(_key: string, _value?: boolean | number | string) {}
-      end() {}
-    }
-    const tracing = {
-      enterSpan: <T, Arguments extends unknown[]>(
-        _name: string,
-        callback: (span: DetachedSpan, ...args: Arguments) => T,
-        ...args: Arguments
-      ) => callback(new DetachedSpan(), ...args),
-      startActiveSpan: <T, Arguments extends unknown[]>(
-        _name: string,
-        callback: (span: DetachedSpan, ...args: Arguments) => T,
-        ...args: Arguments
-      ) => callback(new DetachedSpan(), ...args),
-      Span: DetachedSpan,
-    };
-    const executionContext = {
-      waitUntil() {},
-      passThroughOnException() {},
-      props: {},
-      tracing,
-    } satisfies ExecutionContext;
-    const response = await createAuthIssuer(env).fetch(tokenRequest, issuerEnv, executionContext);
-    if (!response.ok) {
-      let errorCode: string | undefined;
-      try {
-        const body = Schema.decodeUnknownSync(
-          Schema.Struct({ error: Schema.optional(Schema.String) }),
-        )(await response.clone().json());
-        errorCode = body.error;
-      } catch {
-        console.warn("[auth] failed to parse token endpoint error body");
-      }
-      logger.log(
-        "auth_refresh_token_exchange_failed",
-        { status: response.status, errorCode },
-        "warn",
-      );
-      return null;
-    }
-    const json = decodeTokenResponse(await response.json());
-    if (!json) return null;
-    return {
-      access: json.access_token,
-      refresh: json.refresh_token,
-      expiresIn: json.expires_in,
-    };
-  } catch (error) {
-    console.warn(
-      "[auth] refresh token exchange failed",
-      error instanceof Error ? error.message : String(error),
-    );
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-export type GetSessionOptions = {
-  /**
-   * Whether to attempt a refresh-token rotation when the access token is
-   * expired. Only routes whose response can plumb the new token pair back
-   * to the browser via Set-Cookie (bootstrap, session) should set this
-   * true. Other routes should leave it false so an expired access token
-   * just produces a 401 — the client will reload and bootstrap will
-   * refresh once. Defaults to true for backwards compat.
-   */
-  refresh?: boolean;
-};
-
-type SharedConsumerAuth = ReturnType<typeof createAuthHandlers>;
-
-let sharedConsumerAuth: { key: string; handlers: SharedConsumerAuth } | null = null;
-
-function getSharedConsumerAuth(env: AppEnv): SharedConsumerAuth | null {
-  const issuerUrl = env.AUTH_ISSUER_URL;
-  if (!issuerUrl) return null;
-
-  const clientId = env.AUTH_CLIENT_ID ?? "shedflare-chat";
-  const key = [
-    issuerUrl,
-    clientId,
-    env.APP_PUBLIC_URL,
-    env.OWNER_EMAIL,
-    env.DEV_AUTH_EMAIL ?? "",
-  ].join("\u001f");
-  if (!sharedConsumerAuth || sharedConsumerAuth.key !== key) {
-    const authConfig = {
-      AUTH_ISSUER_URL: issuerUrl,
-      AUTH_CLIENT_ID: clientId,
-      APP_PUBLIC_URL: env.APP_PUBLIC_URL,
-      OWNER_EMAIL: env.OWNER_EMAIL,
-    };
-    const configuredAuth = env.DEV_AUTH_EMAIL
-      ? { ...authConfig, DEV_AUTH_EMAIL: env.DEV_AUTH_EMAIL }
-      : authConfig;
-    sharedConsumerAuth = {
-      key,
-      handlers: createAuthHandlers(configuredAuth),
-    };
-  }
-  return sharedConsumerAuth.handlers;
-}
-
-function createOwnerSession(
-  env: AppEnv,
-  email: string,
-  options: { name?: string; tokens?: AccessSession["tokens"] } = {},
-): AccessSession | null {
-  if (!isOwnerEmail(email, env.OWNER_EMAIL)) return null;
-  const user = options.name
-    ? { email: normalizeEmail(email), name: options.name }
-    : { email: normalizeEmail(email) };
-  return options.tokens ? { user, tokens: options.tokens } : { user };
-}
-
-export async function getSession(
-  request: Request,
-  env: AppEnv,
-  options: GetSessionOptions = {},
-): Promise<AccessSession | null> {
-  const startedAt = Date.now();
-
-  const sharedAuth = getSharedConsumerAuth(env);
-  if (sharedAuth) {
-    const session = await sharedAuth.authenticate(request, { refresh: options.refresh ?? true });
-    return session ? createOwnerSession(env, session.email, { tokens: session.tokens }) : null;
-  }
-
-  const token = getCookie(request, "auth_access_token");
-  const refreshToken = getCookie(request, "auth_refresh_token");
-
-  if (!token) {
-    if (env.DEV_AUTH_EMAIL && isLocalDevRequest(request)) {
-      return createOwnerSession(env, env.DEV_AUTH_EMAIL, { name: "Local Dev" });
-    }
-    return null;
-  }
-
-  const verified = await verifyAccessLocally(token, env);
-  if (verified.kind === "ok") {
-    return createOwnerSession(env, verified.email);
-  }
-
-  const refresh = options.refresh ?? true;
-  if (refresh && refreshToken) {
-    const rotated = await rotateRefreshToken(refreshToken, env);
-    if (!rotated) {
-      logger.log(
-        "auth_refresh_failed",
-        { kind: verified.kind, durationMs: Date.now() - startedAt },
-        "warn",
-      );
-      return null;
-    }
-    const reverified = await verifyAccessLocally(rotated.access, env);
-    if (reverified.kind !== "ok") {
-      logger.log(
-        "auth_rotated_access_token_invalid",
-        {
-          kind: reverified.kind,
-          durationMs: Date.now() - startedAt,
-        },
-        "warn",
-      );
-      return null;
-    }
-    logger.log("auth_session_refreshed", { durationMs: Date.now() - startedAt });
-    return createOwnerSession(env, reverified.email, { tokens: rotated });
-  }
-
-  logger.log("auth_session_not_valid", {
-    kind: verified.kind,
-    refreshAttempted: verified.kind === "expired" && refresh && Boolean(refreshToken),
-    durationMs: Date.now() - startedAt,
-  });
-  return null;
-}
-
-export async function requireSession(
-  request: Request,
-  env: AppEnv,
-  options: GetSessionOptions = {},
-) {
-  const session = await getSession(request, env, options);
+export async function requireSession(request: Request, env: AppEnv): Promise<AccessSession> {
+  const session = await getSession(request, env);
   if (!session) throw new Response("Unauthorized", { status: 401 });
   return session;
 }

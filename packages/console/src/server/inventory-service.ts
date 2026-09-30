@@ -11,6 +11,7 @@ import {
 import { resolveCurrentStage } from "./stage-service.ts";
 import {
   appUrl,
+  appDeploymentStage,
   discoverAppIds,
   loadConfig,
   loadManifest,
@@ -141,8 +142,13 @@ export async function buildAppStatuses(
         ? !!config.apps[id] && config.apps[id].enabled !== false
         : !!entry;
     const configuredSubdomain = entry?.subdomain ?? manifest?.defaultSubdomain ?? id;
-    const subdomain = stageSubdomain(configuredSubdomain, stage);
-    const workerName = physicalWorkerName(id);
+    const deploymentStage = enabled && config ? appDeploymentStage(config, id, stage) : stage;
+    const url = config ? appUrl(config, id, deploymentStage) : null;
+    const subdomain =
+      url && config
+        ? new URL(url).hostname.slice(0, -(config.domain.length + 1))
+        : stageSubdomain(configuredSubdomain, deploymentStage);
+    const workerName = physicalWorkerName(id, deploymentStage);
     const workerDeployed = workerIds.has(workerName);
 
     let secrets: Array<{ name: string; set: boolean }> = [];
@@ -167,7 +173,7 @@ export async function buildAppStatuses(
       manifest,
       enabled,
       subdomain,
-      url: config ? appUrl(config, id, stage) : null,
+      url,
       workerName,
       workerDeployed,
       dashboardUrl: workerDashboardUrl(env.accountId, workerName),

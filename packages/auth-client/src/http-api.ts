@@ -53,7 +53,6 @@ export function createHttpApiAuth(env: AuthEnv) {
     gateHtml: auth.gateHtml,
     requireSession,
     createProtectedHandler,
-    withSessionCookies: auth.withSessionCookies,
     withCookies: auth.withCookies,
     getCookie: auth.getCookie,
     isDocumentRequest: auth.isDocumentRequest,

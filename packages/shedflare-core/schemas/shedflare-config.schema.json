@@ -37,6 +37,17 @@
             "additionalProperties": {
               "type": "string"
             }
+          },
+          "productionAliases": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "pattern": "^(?!prod$|e2e[-_])[a-z0-9][a-z0-9_-]*$"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+            }
           }
         },
         "required": [],

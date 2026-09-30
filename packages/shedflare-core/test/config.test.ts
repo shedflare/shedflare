@@ -11,6 +11,7 @@ import {
   patchConfig,
   parseManifest,
   resolveAppConfig,
+  resolveDeploymentStage,
   selectedAppIds,
   validateConfig,
   writeConfigMigration,
@@ -87,6 +88,59 @@ const legacyConfig = {
 };
 
 describe("config validation and resolution", () => {
+  test("preserves legacy production hostnames while isolating unlisted stages", () => {
+    const config = validateConfig(
+      {
+        configVersion: 2,
+        domain: "example.com",
+        ownerEmail: "owner@example.com",
+        apps: {
+          auth: {},
+          chat: { productionAliases: { dev_bolt: "chat" } },
+          drive: { productionAliases: { dev_bolt: "drive-dev-bolt" } },
+        },
+      },
+      catalog,
+    );
+    expect(resolveAppConfig(config, catalog, "chat", "dev_bolt")).toMatchObject({
+      url: "https://chat.example.com",
+      authStage: "prod",
+    });
+    expect(resolveDeploymentStage(config, catalog, "chat")).toBe("dev_bolt");
+    expect(resolveDeploymentStage(config, catalog, "drive")).toBe("prod");
+    expect(resolveAppConfig(config, catalog, "drive", "dev_bolt")).toMatchObject({
+      url: "https://drive-dev-bolt.example.com",
+      authStage: "prod",
+    });
+    for (const stage of ["e2e-proof", "auth-cutover-proof", "dev_other"]) {
+      expect(resolveAppConfig(config, catalog, "chat", stage)).toMatchObject({
+        url: `https://chat-${stage.replaceAll("_", "-")}.example.com`,
+        authStage: stage,
+      });
+      expect(resolveDeploymentStage(config, catalog, "chat", stage)).toBe(stage);
+    }
+    expect(migrateConfig(config, catalog).config).toEqual(config);
+  });
+
+  test("rejects aliases for proof stages and Auth itself", () => {
+    for (const [appId, aliases] of [
+      ["chat", { "e2e-proof": "chat" }],
+      ["chat", { prod: "chat" }],
+      ["auth", { dev_bolt: "auth" }],
+    ] as const) {
+      expect(() =>
+        validateConfig(
+          {
+            configVersion: 2,
+            domain: "example.com",
+            ownerEmail: "owner@example.com",
+            apps: { [appId]: { productionAliases: aliases } },
+          },
+          catalog,
+        ),
+      ).toThrow(CoreError);
+    }
+  });
   test("keeps version 1 readable without mutating the input", () => {
     const input = structuredClone(legacyConfig);
     const config = validateConfig(input, catalog);
@@ -187,6 +241,30 @@ describe("config migration", () => {
 });
 
 describe("comment-preserving patches", () => {
+  test("keeps production aliases through unrelated edits and removes them explicitly", () => {
+    const tempRoot = temporaryRoot();
+    const path = join(tempRoot, "shedflare.config.jsonc");
+    writeFileSync(
+      path,
+      JSON.stringify({
+        configVersion: 2,
+        domain: "example.com",
+        ownerEmail: "owner@example.com",
+        apps: { chat: {} },
+      }),
+    );
+    patchConfig(tempRoot, { apps: { chat: { productionAliases: { dev_bolt: "chat" } } } }, catalog);
+    const config = patchConfig(
+      tempRoot,
+      { apps: { chat: { vars: { DEFAULT_MODEL_ID: "test" } } } },
+      catalog,
+    );
+    expect(config.apps.chat.productionAliases).toEqual({ dev_bolt: "chat" });
+    expect(loadConfig(tempRoot, catalog)).toEqual(config);
+    const removed = patchConfig(tempRoot, { apps: { chat: { productionAliases: null } } }, catalog);
+    expect(removed.apps.chat.productionAliases).toBeUndefined();
+    expect(resolveDeploymentStage(removed, catalog, "chat")).toBe("prod");
+  });
   test("preserves comments while applying a sparse config update", () => {
     const tempRoot = temporaryRoot();
     const path = join(tempRoot, "shedflare.config.jsonc");

@@ -16,12 +16,12 @@ test.skipIf(!live)(
   "auth worker is reachable",
   Effect.gen(function* () {
     const deployed = yield* deploy(AuthStack);
-    const base = deployed.url;
+    const base = deployed.configuredUrl;
     if (!base) throw new Error("Auth deployment did not return a URL");
     assert.ok(base);
     const response = yield* Effect.promise(() => fetch(base));
     assert.equal(response.status, 200);
-    assert.equal(yield* Effect.promise(() => response.text()), "Shedflare Auth");
+    assert.match(yield* Effect.promise(() => response.text()), /Shedflare Auth/);
   }),
   { timeout: 120_000 },
 );

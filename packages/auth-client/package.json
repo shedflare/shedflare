@@ -10,18 +10,17 @@
   "type": "module",
   "exports": {
     "./consumer": "./src/consumer.ts",
-    "./issuer": "./src/issuer.ts",
     "./http-api": "./src/http-api.ts",
-    "./client": "./src/client.ts"
+    "./client": "./src/client.ts",
+    "./contract": "./src/contract.ts",
+    "./deployments": "./src/deployments.ts"
   },
   "scripts": {
     "check": "vp check src",
     "typecheck": "vp check --no-fmt --no-lint"
   },
   "dependencies": {
-    "@openauthjs/openauth": "^0.4.3",
     "effect": "catalog:",
-    "jose": "catalog:",
     "valibot": "catalog:"
   },
   "devDependencies": {

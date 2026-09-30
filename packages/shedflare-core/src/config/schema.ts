@@ -20,6 +20,7 @@ export const EmailSchema = pipe(string(), regex(/^[^@\s]+@[^@\s]+\.[^@\s]+$/));
 export const SubdomainSchema = pipe(string(), regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/));
 
 const VarsSchema = record(EnvNameSchema, string());
+const LegacyProductionStageSchema = pipe(string(), regex(/^(?!prod$|e2e[-_])[a-z0-9][a-z0-9_-]*$/));
 
 export const LegacyAppSelectionSchema = strictObject({
   enabled: optional(boolean()),
@@ -29,6 +30,7 @@ export const LegacyAppSelectionSchema = strictObject({
 export const AppSelectionSchema = strictObject({
   subdomain: optional(SubdomainSchema),
   vars: optional(VarsSchema),
+  productionAliases: optional(record(LegacyProductionStageSchema, SubdomainSchema)),
 });
 
 export const ShedflareConfigV1Schema = strictObject({
@@ -51,6 +53,9 @@ export const ShedflareConfigV2Schema = strictObject({
 export const AppSelectionPatchSchema = strictObject({
   subdomain: optional(nullable(SubdomainSchema)),
   vars: optional(nullable(record(EnvNameSchema, nullable(string())))),
+  productionAliases: optional(
+    nullable(record(LegacyProductionStageSchema, nullable(SubdomainSchema))),
+  ),
 });
 
 export const ConfigPatchSchema = strictObject({

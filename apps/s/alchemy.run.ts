@@ -30,12 +30,14 @@ export const ShortStack = Alchemy.Stack(
       env: {
         DB: db,
         APP_PUBLIC_URL: config.url,
-        AUTH_ISSUER_URL: yield* Shedflare.authIssuerUrl(),
+        AUTH_URL: yield* Shedflare.authUrl("s"),
         AUTH_CLIENT_ID: `shedflare-s`,
         OWNER_EMAIL: config.ownerEmail,
       },
       domain: config.url.startsWith("https://") ? new URL(config.url).hostname : undefined,
     });
+
+    yield* Shedflare.bindAuth(worker, "s");
 
     return {
       app: "s" as const,

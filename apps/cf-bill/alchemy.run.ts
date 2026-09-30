@@ -25,7 +25,7 @@ export const CfBillStack = Alchemy.Stack(
       },
       env: {
         APP_PUBLIC_URL: config.url,
-        AUTH_ISSUER_URL: yield* Shedflare.authIssuerUrl(),
+        AUTH_URL: yield* Shedflare.authUrl("cf-bill"),
         AUTH_CLIENT_ID: `shedflare-cf-bill`,
         OWNER_EMAIL: config.ownerEmail,
         CLOUDFLARE_ACCOUNT_ID: Shedflare.requireVar(config, "CLOUDFLARE_ACCOUNT_ID"),
@@ -44,6 +44,8 @@ export const CfBillStack = Alchemy.Stack(
     if (Option.isSome(cfToken)) secretProps.value = cfToken.value;
 
     yield* Shedflare.WorkerSecret("CfApiToken", secretProps);
+
+    yield* Shedflare.bindAuth(worker, "cf-bill");
 
     return {
       app: "cf-bill" as const,

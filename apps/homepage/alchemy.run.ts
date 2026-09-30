@@ -35,12 +35,14 @@ export const HomepageStack = Alchemy.Stack(
         DB: db,
         IMAGES: images,
         APP_PUBLIC_URL: config.url,
-        AUTH_ISSUER_URL: yield* Shedflare.authIssuerUrl(),
+        AUTH_URL: yield* Shedflare.authUrl("homepage"),
         AUTH_CLIENT_ID: `shedflare-homepage`,
         OWNER_EMAIL: config.ownerEmail,
       },
       domain: config.url.startsWith("https://") ? new URL(config.url).hostname : undefined,
     });
+
+    yield* Shedflare.bindAuth(worker, "homepage");
 
     return {
       app: "homepage" as const,

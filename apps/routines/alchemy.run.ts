@@ -29,12 +29,14 @@ export const RoutinesStack = Alchemy.Stack(
       env: {
         DB: db,
         APP_PUBLIC_URL: config.url,
-        AUTH_ISSUER_URL: yield* Shedflare.authIssuerUrl(),
+        AUTH_URL: yield* Shedflare.authUrl("routines"),
         AUTH_CLIENT_ID: `shedflare-routines`,
         OWNER_EMAIL: config.ownerEmail,
       },
       domain: config.url.startsWith("https://") ? new URL(config.url).hostname : undefined,
     });
+
+    yield* Shedflare.bindAuth(worker, "routines");
 
     return {
       app: "routines" as const,

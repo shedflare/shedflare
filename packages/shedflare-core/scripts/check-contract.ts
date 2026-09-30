@@ -36,6 +36,19 @@ const independentlyDeployedAppIds = new Set(["drive"]);
 for (const appId of catalog.appIds) {
   const stackPath = `${root}/apps/${appId}/alchemy.run.ts`;
   if (!existsSync(stackPath)) throw new Error(`${stackPath} is missing.`);
+  const manifest = catalog.manifests.get(appId);
+  if (manifest?.dependsOn.includes("auth")) {
+    const stack = readFileSync(stackPath, "utf8");
+    if (
+      !manifest.resources.some(
+        (resource) =>
+          resource.type === "service" && resource.binding === "AUTH" && resource.app === "auth",
+      ) ||
+      !stack.includes(`Shedflare.bindAuth(worker, "${appId}")`)
+    ) {
+      throw new Error(`${appId} must declare and wire its Auth RPC service binding.`);
+    }
+  }
   const liveTestPath = `${root}/apps/${appId}/alchemy.test.ts`;
   if (
     existsSync(liveTestPath) &&

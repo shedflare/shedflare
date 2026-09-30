@@ -4,6 +4,7 @@ import {
   loadManifest as loadCoreManifest,
   patchConfig as patchCoreConfig,
   resolveAppConfig,
+  resolveDeploymentStage,
   type AppManifest,
   type ShedflareConfig,
 } from "@shedflare/core";
@@ -66,6 +67,10 @@ export function appUrl(config: ShedflareConfig, appId: string, stage = "prod"): 
   } catch {
     return null;
   }
+}
+
+export function appDeploymentStage(config: ShedflareConfig, appId: string, stage = "prod"): string {
+  return resolveDeploymentStage(config, catalog(), appId, stage);
 }
 
 export function patchConfig<Patch>(value: Patch): ShedflareConfig {

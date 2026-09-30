@@ -1,5 +1,5 @@
 APP_PUBLIC_URL=http://localhost:5173
-AUTH_ISSUER_URL=https://auth.example.com
+AUTH_URL=https://auth.example.com
 AUTH_CLIENT_ID=shedflare-anki
 OWNER_EMAIL=you@example.com
 DEV_AUTH_EMAIL=you@example.com

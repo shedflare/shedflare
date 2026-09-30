@@ -612,7 +612,7 @@ graph TB
 │   ├── anki/          # Spaced-repetition cards
 │   ├── chat/          # AI chat app (this guide)
 │   ├── drive/         # File storage app (this guide)
-│   ├── auth/          # OpenAuth issuer
+│   ├── auth/          # Shared Auth Worker and session store
 │   ├── homepage/      # Personal homepage
 │   ├── money/         # Budgeting app
 │   ├── cf-bill/       # Cloudflare billing dashboard
@@ -728,7 +728,8 @@ sequenceDiagram
     end
     LLM-->>DO: done
     DO->>C: event (message_completed)
-</pre>
+</pre
+          >
         </div>
 
         <h3 id="chat-sync">The Sync Protocol</h3>

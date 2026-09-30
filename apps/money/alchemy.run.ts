@@ -43,7 +43,7 @@ export const MoneyStack = Alchemy.Stack(
         UPLOADS: uploads,
         MONEY_DB: moneyDb,
         APP_PUBLIC_URL: config.url,
-        AUTH_ISSUER_URL: yield* Shedflare.authIssuerUrl(),
+        AUTH_URL: yield* Shedflare.authUrl("money"),
         AUTH_CLIENT_ID: `shedflare-money`,
         OWNER_EMAIL: config.ownerEmail,
         ...e2eAuth,
@@ -51,6 +51,8 @@ export const MoneyStack = Alchemy.Stack(
       domain:
         !isE2eStage && config.url.startsWith("https://") ? new URL(config.url).hostname : undefined,
     });
+
+    yield* Shedflare.bindAuth(worker, "money");
 
     return {
       app: "money" as const,

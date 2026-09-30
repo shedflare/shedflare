@@ -29,7 +29,7 @@ export function createRouter(env: Env) {
         }
         if (pathname === "/api/auth/callback" && method === "GET")
           return await auth.handleCallback(request);
-        if (pathname === "/api/auth/logout" && method === "POST") return auth.logout();
+        if (pathname === "/api/auth/logout" && method === "POST") return await auth.logout(request);
         if (pathname === "/api/session" && method === "GET")
           return await auth.sessionEndpoint(request);
 

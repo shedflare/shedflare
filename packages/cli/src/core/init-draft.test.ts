@@ -108,8 +108,8 @@ test("createPlan resolves URLs before vars regardless of input order", () => {
   expect(plan.urls.auth).toBe("https://auth.example.com");
   expect(plan.urls.chat).toBe("https://chat.example.com");
 
-  // chat's AUTH_ISSUER_URL should resolve to auth's URL
-  expect(plan.resolvedVars.chat?.AUTH_ISSUER_URL).toBe("https://auth.example.com");
+  // chat's AUTH_URL should resolve to auth's URL
+  expect(plan.resolvedVars.chat?.AUTH_URL).toBe("https://auth.example.com");
 });
 
 test("createPlan sets deploy order with auth first", () => {
@@ -141,7 +141,7 @@ test("createPlan resolves all var sources", () => {
   // url type
   expect(plan.resolvedVars.auth?.APP_PUBLIC_URL).toBe("https://auth.test.com");
   // appUrl type
-  expect(plan.resolvedVars.chat?.AUTH_ISSUER_URL).toBe("https://auth.test.com");
+  expect(plan.resolvedVars.chat?.AUTH_URL).toBe("https://auth.test.com");
   // appId type
   expect(plan.resolvedVars.chat?.AUTH_CLIENT_ID).toBe("shedflare-chat");
   // ownerEmail type

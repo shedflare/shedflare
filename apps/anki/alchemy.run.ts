@@ -29,12 +29,14 @@ export const AnkiStack = Alchemy.Stack(
       env: {
         DB: db,
         APP_PUBLIC_URL: config.url,
-        AUTH_ISSUER_URL: yield* Shedflare.authIssuerUrl(),
+        AUTH_URL: yield* Shedflare.authUrl("anki"),
         AUTH_CLIENT_ID: `shedflare-anki`,
         OWNER_EMAIL: config.ownerEmail,
       },
       domain: config.url.startsWith("https://") ? new URL(config.url).hostname : undefined,
     });
+
+    yield* Shedflare.bindAuth(worker, "anki");
 
     return {
       app: "anki" as const,

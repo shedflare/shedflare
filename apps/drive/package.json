@@ -41,6 +41,7 @@
     "@cloudflare/vite-plugin": "catalog:",
     "@cloudflare/workers-types": "catalog:",
     "@playwright/test": "^1.60.0",
+    "@shedflare/auth": "workspace:*",
     "@shedflare/test-utils": "workspace:*",
     "@solidjs/testing-library": "^0.8.0",
     "@types/node": "catalog:",
@@ -66,7 +67,7 @@
       "OWNER_EMAIL": {
         "description": "Deployment owner email."
       },
-      "AUTH_ISSUER_URL": {
+      "AUTH_URL": {
         "description": "Canonical public URL of Shedflare Auth."
       },
       "AUTH_CLIENT_ID": {

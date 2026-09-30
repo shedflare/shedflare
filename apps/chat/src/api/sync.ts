@@ -2,7 +2,7 @@ import { getRuntimeEnv, getSyncStub, requireSession } from "#/runtime";
 
 export async function handleSync(request: Request): Promise<Response> {
   const env = getRuntimeEnv();
-  await requireSession(request, env, { refresh: false });
+  await requireSession(request, env);
   const stub = await getSyncStub(env);
   const url = new URL(request.url);
   const syncPrefix = "/api/sync";

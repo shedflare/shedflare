@@ -27,6 +27,24 @@ export function stageSubdomain(subdomain: string, stage: string): string {
   return suffix ? `${subdomain}-${suffix}` : subdomain;
 }
 
+/** Select the existing owner of an app's canonical production hostname. */
+export function resolveDeploymentStage(
+  config: ShedflareConfig,
+  catalog: ManifestCatalog,
+  appId: string,
+  stage = "prod",
+): string {
+  if (stage !== "prod" || config.configVersion !== 2) return stage;
+  const app = resolveAppConfig(config, catalog, appId, stage);
+  const owners = Object.entries(config.apps[appId]?.productionAliases ?? {})
+    .filter(([, subdomain]) => subdomain === app.configuredSubdomain)
+    .map(([ownerStage]) => ownerStage);
+  if (owners.length > 1) {
+    throw new CoreError("CONFIG_INVALID", `Multiple production owners configured for ${appId}.`);
+  }
+  return owners[0] ?? stage;
+}
+
 export function resolveAppConfig(
   config: ShedflareConfig,
   catalog: ManifestCatalog,
@@ -57,9 +75,11 @@ export function resolveAppConfig(
     config.configVersion === 1 ? (config.vars[appId] ?? {}) : (selection?.vars ?? {}),
   );
 
-  const stageSpecificSubdomain = stageSubdomain(configuredSubdomain, stage);
+  const productionAlias = selection?.productionAliases?.[stage];
+  const stageSpecificSubdomain = productionAlias ?? stageSubdomain(configuredSubdomain, stage);
   return {
     appId,
+    authStage: productionAlias === undefined ? stage : "prod",
     domain: config.domain,
     configuredSubdomain,
     stageSubdomain: stageSpecificSubdomain,

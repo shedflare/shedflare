@@ -951,9 +951,20 @@ describe("server helpers", () => {
     DEFAULT_MODEL_ID: "openai/gpt-4.1",
     APP_PUBLIC_URL: "https://chat.example.com",
     UPLOAD_TOKEN_SECRET: "test-secret",
-    GOOGLE_CLIENT_ID: "test-google-client-id",
+    AUTH_URL: "https://auth.example.com",
+    AUTH_CLIENT_ID: "shedflare-chat",
+    AUTH: {
+      async validateSession() {
+        throw new Error("Unexpected Auth RPC in local test");
+      },
+      async exchangeCode() {
+        throw new Error("Unexpected Auth RPC in local test");
+      },
+      async revokeSession() {
+        throw new Error("Unexpected Auth RPC in local test");
+      },
+    },
     OWNER_EMAIL: "owner@example.com",
-    OPENAUTH_STORAGE: {},
     DEV_AUTH_EMAIL: "owner@example.com",
     EXA_API_KEY: "exa-key",
     UPLOADS: {},

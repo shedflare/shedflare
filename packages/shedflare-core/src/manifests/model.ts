@@ -1,3 +1,6 @@
+import type { InferOutput } from "valibot";
+import type { ResourceDescriptorSchema } from "./schema.ts";
+
 export type Lifecycle = "beta" | "experimental";
 
 export type AppCategory =
@@ -60,7 +63,13 @@ export interface BrowserResourceDescriptor {
   readonly manualEnable?: boolean;
 }
 
+export type ServiceResourceDescriptor = Extract<
+  InferOutput<typeof ResourceDescriptorSchema>,
+  { type: "service" }
+>;
+
 export type ResourceDescriptor =
+  | ServiceResourceDescriptor
   | KvResourceDescriptor
   | D1ResourceDescriptor
   | R2ResourceDescriptor

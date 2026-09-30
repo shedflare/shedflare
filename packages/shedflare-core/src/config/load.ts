@@ -73,19 +73,13 @@ function parseConfigVersionTwo<Input>(input: Input): ShedflareConfigV2 {
       Object.entries(config.apps).map(([appId, selection]) => [
         appId,
         (() => {
-          if (selection.subdomain !== undefined && selection.vars !== undefined) {
-            return {
-              subdomain: selection.subdomain,
-              vars: { ...selection.vars },
-            } satisfies AppSelection;
+          const app: typeof selection = {};
+          if (selection.subdomain !== undefined) app.subdomain = selection.subdomain;
+          if (selection.vars !== undefined) app.vars = { ...selection.vars };
+          if (selection.productionAliases !== undefined) {
+            app.productionAliases = { ...selection.productionAliases };
           }
-          if (selection.subdomain !== undefined) {
-            return { subdomain: selection.subdomain } satisfies AppSelection;
-          }
-          if (selection.vars !== undefined) {
-            return { vars: { ...selection.vars } } satisfies AppSelection;
-          }
-          return {} satisfies AppSelection;
+          return app satisfies AppSelection;
         })(),
       ]),
     ),
@@ -128,6 +122,18 @@ export function validateConfig<Input>(input: Input, catalog: ManifestCatalog): S
 
   const config = versionValue === 2 ? parseConfigVersionTwo(input) : parseConfigVersionOne(input);
   assertKnownApps(config, catalog);
+  if (config.configVersion === 2) {
+    for (const [appId, selection] of Object.entries(config.apps)) {
+      if (
+        Object.keys(selection.productionAliases ?? {}).length > 0 &&
+        !catalog.manifests.get(appId)?.dependsOn.includes("auth")
+      ) {
+        throw new CoreError("CONFIG_INVALID", "Production aliases require an Auth consumer.", {
+          fieldPath: `apps.${appId}.productionAliases`,
+        });
+      }
+    }
+  }
   return config;
 }
 

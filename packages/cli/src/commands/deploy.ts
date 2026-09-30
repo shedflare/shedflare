@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { loadManifest, isAppId, type AppId } from "../core/manifests.js";
 import { isAppSelected, loadConfig, validateConfig } from "../core/config.js";
 import { parseSecretFlags, applySecretsToEnv, clearSecretsFromEnv } from "./secret.js";
+import { discoverManifests, findRepoRoot, resolveDeploymentStage } from "@shedflare/core";
 
 export interface DeployOptions {
   app?: string;
@@ -60,6 +61,17 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     process.exit(1);
   }
 
+  const catalog = discoverManifests(findRepoRoot());
+  const stage = selectedApp ? resolveDeploymentStage(validConfig, catalog, selectedApp) : "prod";
+  if (
+    !selectedApp &&
+    appIds.some((id) => resolveDeploymentStage(validConfig, catalog, id) !== "prod")
+  ) {
+    throw new Error(
+      "The suite contains legacy production stages. Deploy its apps individually to preserve existing ownership.",
+    );
+  }
+
   // Parse --secret flags
   const flagSecrets = parseSecretFlags(process.argv.slice(2));
 
@@ -87,7 +99,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     console.log(`Deploying via Alchemy: ${target}...`);
     await spawn(
       "vp",
-      ["exec", "alchemy", "deploy", target, "--stage", "prod", "--env-file", emptyEnvFile, "--yes"],
+      ["exec", "alchemy", "deploy", target, "--stage", stage, "--env-file", emptyEnvFile, "--yes"],
       {
         stdio: "inherit",
       },

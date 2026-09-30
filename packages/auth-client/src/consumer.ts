@@ -1,10 +1,19 @@
-import { createClient } from "@openauthjs/openauth/client";
-import { createRemoteJWKSet, errors as joseErrors, jwtVerify } from "jose";
-import { nullable, number, object, safeParse, string } from "valibot";
+import { nullable, object, safeParse, string } from "valibot";
 import { AUTH_HINT_COOKIE } from "./client";
+import {
+  LOGIN_TTL_SECONDS,
+  SESSION_COOKIE,
+  STATE_COOKIE,
+  hashToken,
+  randomToken,
+  type AuthRpc,
+  type Session,
+} from "./contract";
 
+export type { Session } from "./contract";
 export type AuthEnv = {
-  AUTH_ISSUER_URL: string;
+  AUTH: AuthRpc;
+  AUTH_URL: string;
   AUTH_CLIENT_ID: string;
   APP_PUBLIC_URL: string;
   OWNER_EMAIL: string;
@@ -12,21 +21,6 @@ export type AuthEnv = {
   E2E_AUTH_EMAIL?: string;
   E2E_AUTH_TOKEN?: string;
 };
-
-export type Session = {
-  email: string;
-  tokens?: {
-    access: string;
-    refresh: string;
-    expiresIn: number;
-  };
-};
-
-type AccessVerifyResult = { kind: "ok"; email: string } | { kind: "expired" } | { kind: "invalid" };
-
-const REFRESH_TIMEOUT_MS = 10_000;
-const AUTH_STATE_COOKIE = "auth_state";
-const STATE_TTL_SECONDS = 600;
 
 export function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
@@ -64,7 +58,11 @@ export function serializeCookie(
 export function getCookie(request: Request, name: string): string | null {
   const cookie = request.headers.get("cookie") ?? "";
   const match = cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
-  return match ? decodeURIComponent(match[1]) : null;
+  try {
+    return match ? decodeURIComponent(match[1]) : null;
+  } catch {
+    return null;
+  }
 }
 
 async function secretsEqual(provided: string, expected: string): Promise<boolean> {
@@ -80,27 +78,7 @@ async function authenticateE2eRequest(request: Request, env: AuthEnv): Promise<S
   if (!env.E2E_AUTH_EMAIL || !env.E2E_AUTH_TOKEN) return null;
   const token = request.headers.get("x-shedflare-e2e-token");
   if (!token || !(await secretsEqual(token, env.E2E_AUTH_TOKEN))) return null;
-  return { email: normalizeEmail(env.E2E_AUTH_EMAIL) };
-}
-
-function envAccessCookie(value: string, maxAge: number) {
-  return serializeCookie("auth_access_token", value, { maxAge });
-}
-
-function envRefreshCookie(value: string) {
-  return serializeCookie("auth_refresh_token", value, { maxAge: 60 * 60 * 24 * 365 });
-}
-
-function clearCookie(name: string, opts?: { httpOnly?: boolean }) {
-  return serializeCookie(name, "", { maxAge: 0, httpOnly: opts?.httpOnly });
-}
-
-function hintCookie(value: string, maxAge?: number) {
-  return serializeCookie(AUTH_HINT_COOKIE, value, { maxAge, httpOnly: false });
-}
-
-function stateCookie(value: string) {
-  return serializeCookie(AUTH_STATE_COOKIE, value, { maxAge: STATE_TTL_SECONDS });
+  return { email: normalizeEmail(env.E2E_AUTH_EMAIL), expiresAt: Date.now() + 60_000 };
 }
 
 export function isDocumentRequest(request: Request): boolean {
@@ -115,221 +93,85 @@ export function isDocumentRequest(request: Request): boolean {
 
 export function validateReturnTo(input: string | null | undefined): string | null {
   if (input === null || input === undefined) return null;
-  // Decode first, then validate the result: validating the still-encoded form
-  // lets `/%2Fevil` slip through (it isn't "//…" until decoded), turning into a
-  // protocol-relative open redirect once used as a Location.
+  const target = input.trim();
+  if (!target.startsWith("/")) return null;
+  // Check decoded separators, but preserve escaping in app paths and queries.
+  // The stored return path is validated again when the callback uses it.
   let decoded: string;
   try {
-    decoded = decodeURIComponent(input.trim());
+    decoded = decodeURIComponent(target);
   } catch {
     return null;
   }
   if (!decoded.startsWith("/")) return null;
-  if (decoded.startsWith("//")) return null;
+  if (decoded.startsWith("//") || decoded.includes("\\")) return null;
+  for (const char of decoded) {
+    if (char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) return null;
+  }
   if (decoded.startsWith("/api/")) return null;
-  return decoded;
+  return target;
 }
 
-function base64urlEncode(input: string): string {
-  return btoa(input).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-function base64urlDecode(input: string): string | null {
-  try {
-    const padded =
-      input.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((input.length + 3) % 4);
-    return atob(padded);
-  } catch {
-    return null;
-  }
-}
-
-function generateNonce(): string {
-  return crypto.randomUUID();
-}
-
-function constantTimeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  const encoder = new TextEncoder();
-  const aBytes = encoder.encode(a);
-  const bBytes = encoder.encode(b);
-  let diff = 0;
-  for (let i = 0; i < aBytes.length; i++) {
-    diff |= aBytes[i] ^ bBytes[i];
-  }
-  return diff === 0;
-}
-
-type StatePayload = { nonce: string; returnTo: string | null };
-
-const StatePayloadSchema = object({ nonce: string(), returnTo: nullable(string()) });
-const AccessPropertiesSchema = object({ email: string() });
-const TokenResponseSchema = object({
-  access_token: string(),
-  refresh_token: string(),
-  expires_in: number(),
+const LoginStateSchema = object({
+  state: string(),
+  verifier: string(),
+  returnTo: nullable(string()),
 });
-
-function encodeState(returnTo: string | null, nonce: string): string {
-  return base64urlEncode(JSON.stringify({ nonce, returnTo }));
-}
-
-function decodeState(state: string): StatePayload | null {
-  const decoded = base64urlDecode(state);
-  if (!decoded) return null;
-  try {
-    const parsed = safeParse(StatePayloadSchema, JSON.parse(decoded));
-    if (!parsed.success) return null;
-    return {
-      nonce: parsed.output.nonce,
-      returnTo: validateReturnTo(parsed.output.returnTo),
-    };
-  } catch {
-    return null;
-  }
-}
 
 export type HtmlGateResult =
   | { kind: "proceed"; session: Session | null; setCookies: string[] }
   | { kind: "redirect"; response: Response };
 
 export function createAuthHandlers(env: AuthEnv) {
-  let jwksUrl: string | null = null;
-  let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
-
-  function getJwks() {
-    const url = `${env.AUTH_ISSUER_URL}/.well-known/jwks.json`;
-    if (!jwks || jwksUrl !== url) {
-      jwksUrl = url;
-      jwks = createRemoteJWKSet(new URL(url));
-    }
-    return jwks;
-  }
-
-  async function verifyAccessToken(
-    token: string,
-    retryOnFailure: boolean,
-  ): Promise<AccessVerifyResult> {
-    for (let attempt = 0; attempt < (retryOnFailure ? 2 : 1); attempt++) {
-      try {
-        const { payload } = await jwtVerify(token, getJwks(), { issuer: env.AUTH_ISSUER_URL });
-        if (payload.mode !== "access") return { kind: "invalid" };
-        const properties = safeParse(AccessPropertiesSchema, payload.properties);
-        return properties.success
-          ? { kind: "ok", email: normalizeEmail(properties.output.email) }
-          : { kind: "invalid" };
-      } catch (error) {
-        if (error instanceof joseErrors.JWTExpired) return { kind: "expired" };
-        if (error instanceof joseErrors.JWSSignatureVerificationFailed && attempt === 0) {
-          jwksUrl = null;
-          jwks = null;
-          continue;
-        }
-        return { kind: "invalid" };
-      }
-    }
-    return { kind: "invalid" };
-  }
-
-  async function parseTokenResponse(response: Response) {
-    const jsonBody: unknown = await response.json().catch(() => null);
-    const tokens = safeParse(TokenResponseSchema, jsonBody);
-    if (!tokens.success) return null;
-    return {
-      accessToken: tokens.output.access_token,
-      refreshToken: tokens.output.refresh_token,
-      expiresIn: tokens.output.expires_in,
-    };
-  }
-
-  async function rotateRefreshToken(refreshToken: string) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), REFRESH_TIMEOUT_MS);
-    try {
-      const response = await fetch(`${env.AUTH_ISSUER_URL}/token`, {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          grant_type: "refresh_token",
-          refresh_token: refreshToken,
-        }),
-        signal: controller.signal,
-      });
-      if (!response.ok) return null;
-      const parsed = await parseTokenResponse(response);
-      if (!parsed) return null;
-      return {
-        access: parsed.accessToken,
-        refresh: parsed.refreshToken,
-        expiresIn: parsed.expiresIn,
-      };
-    } catch {
-      return null;
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-
-  async function authenticate(
-    request: Request,
-    options?: { refresh?: boolean },
-  ): Promise<Session | null> {
-    const e2eSession = await authenticateE2eRequest(request, env);
-    if (e2eSession) return e2eSession;
-
-    if (env.DEV_AUTH_EMAIL && isLocalRequest(request)) {
-      return { email: normalizeEmail(env.DEV_AUTH_EMAIL) };
-    }
-
-    const accessToken = getCookie(request, "auth_access_token");
-    const refreshToken = getCookie(request, "auth_refresh_token");
-    if (!accessToken && !refreshToken) return null;
-
-    const verified = accessToken
-      ? await verifyAccessToken(accessToken, true)
-      : { kind: "invalid" as const };
-    if (verified.kind === "ok") return { email: verified.email };
-
-    const shouldRefresh = options?.refresh ?? true;
-    if (shouldRefresh && refreshToken) {
-      const rotated = await rotateRefreshToken(refreshToken);
-      if (!rotated) return null;
-      const reverified = await verifyAccessToken(rotated.access, false);
-      if (reverified.kind !== "ok") return null;
-      return { email: reverified.email, tokens: rotated };
-    }
-
-    return null;
-  }
-
-  async function requireSession(
-    request: Request,
-    options?: { refresh?: boolean },
-  ): Promise<Session> {
-    const session = await authenticate(request, options);
-    if (!session) throw new Response("Unauthorized", { status: 401 });
-    if (!isOwnerEmail(session.email, env.OWNER_EMAIL)) {
-      throw new Response("Forbidden", { status: 403 });
-    }
-    return session;
-  }
-
-  function withSessionCookies(response: Response, session: Session) {
-    if (!session.tokens) return response;
-    const headers = new Headers(response.headers);
-    headers.append("Set-Cookie", envAccessCookie(session.tokens.access, session.tokens.expiresIn));
-    headers.append("Set-Cookie", envRefreshCookie(session.tokens.refresh));
-    return new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
+  const origin = new URL(env.APP_PUBLIC_URL).origin;
+  const client = { clientId: env.AUTH_CLIENT_ID, origin };
+  const clearCookie = (name: string, httpOnly = true) =>
+    serializeCookie(name, "", { maxAge: 0, httpOnly });
+  const hintCookie = (session: Session) =>
+    serializeCookie(AUTH_HINT_COOKIE, session.email, {
+      httpOnly: false,
+      maxAge: Math.max(0, Math.floor((session.expiresAt - Date.now()) / 1000)),
     });
+
+  async function rpc<A>(call: () => Promise<A>): Promise<A> {
+    try {
+      return await call();
+    } catch {
+      throw new Response("Authentication service unavailable. Please retry.", {
+        status: 503,
+        headers: { "cache-control": "no-store", "retry-after": "5" },
+      });
+    }
+  }
+
+  async function authenticate(request: Request): Promise<Session | null> {
+    const e2eSession = await authenticateE2eRequest(request, env);
+    if (e2eSession && isOwnerEmail(e2eSession.email, env.OWNER_EMAIL)) return e2eSession;
+    if (
+      env.DEV_AUTH_EMAIL &&
+      isLocalRequest(request) &&
+      isOwnerEmail(env.DEV_AUTH_EMAIL, env.OWNER_EMAIL)
+    ) {
+      return { email: normalizeEmail(env.DEV_AUTH_EMAIL), expiresAt: Date.now() + 60_000 };
+    }
+    const token = getCookie(request, SESSION_COOKIE);
+    if (!token) return null;
+    const result = await rpc(() => env.AUTH.validateSession({ ...client, token }));
+    return result.kind === "authenticated" ? result.session : null;
+  }
+
+  async function requireSession(request: Request): Promise<Session> {
+    const session = await authenticate(request);
+    if (!session)
+      throw new Response("Unauthorized", { status: 401, headers: { "cache-control": "no-store" } });
+    return session;
   }
 
   function withCookies(response: Response, cookies: string[]) {
     if (cookies.length === 0) return response;
     const headers = new Headers(response.headers);
     for (const cookie of cookies) headers.append("Set-Cookie", cookie);
+    headers.set("cache-control", "no-store");
     return new Response(response.body, {
       status: response.status,
       statusText: response.statusText,
@@ -337,106 +179,107 @@ export function createAuthHandlers(env: AuthEnv) {
     });
   }
 
-  async function loginRedirect(returnTo?: string | null): Promise<Response> {
-    const validReturnTo = validateReturnTo(returnTo);
-    const nonce = generateNonce();
-    const client = createClient({ clientID: env.AUTH_CLIENT_ID, issuer: env.AUTH_ISSUER_URL });
-    const { url: authUrl } = await client.authorize(
-      `${env.APP_PUBLIC_URL}/api/auth/callback`,
-      "code",
-      { provider: "google" },
+  async function startLogin(returnTo: string | null | undefined, silent: boolean) {
+    const state = randomToken();
+    const verifier = randomToken();
+    const url = new URL("/authorize", env.AUTH_URL);
+    url.searchParams.set("client_id", client.clientId);
+    url.searchParams.set("redirect_uri", `${origin}/api/auth/callback`);
+    url.searchParams.set("state", state);
+    url.searchParams.set("code_challenge", await hashToken(verifier));
+    if (silent) url.searchParams.set("auto", "1");
+    const headers = new Headers({
+      Location: url.toString(),
+      "cache-control": "no-store",
+      "referrer-policy": "no-referrer",
+    });
+    headers.append(
+      "Set-Cookie",
+      serializeCookie(
+        STATE_COOKIE,
+        JSON.stringify({ state, verifier, returnTo: validateReturnTo(returnTo) }),
+        { maxAge: LOGIN_TTL_SECONDS },
+      ),
     );
-    const redirectUrl = new URL(authUrl);
-    redirectUrl.searchParams.set("state", encodeState(validReturnTo, nonce));
-    const headers = new Headers({ Location: redirectUrl.toString() });
-    headers.append("Set-Cookie", stateCookie(nonce));
     return new Response(null, { status: 302, headers });
   }
 
-  async function autoLoginRedirect(returnTo?: string | null): Promise<Response> {
-    const response = await loginRedirect(returnTo);
-    const location = response.headers.get("Location");
-    if (!location) return response;
-    const redirectUrl = new URL(location);
-    redirectUrl.searchParams.set("auto", "1");
-    const headers = new Headers(response.headers);
-    headers.set("Location", redirectUrl.toString());
-    return new Response(null, { status: response.status, headers });
+  function loginRedirect(returnTo?: string | null) {
+    return startLogin(returnTo, false);
+  }
+  function autoLoginRedirect(returnTo?: string | null) {
+    return startLogin(returnTo, true);
   }
 
   async function handleCallback(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    const code = url.searchParams.get("code");
-    if (!code) return new Response("Missing code", { status: 400 });
-
-    const stateParam = url.searchParams.get("state") ?? "";
-    const stateCookieValue = getCookie(request, AUTH_STATE_COOKIE) ?? "";
-    const decoded = decodeState(stateParam);
-    const returnTo =
-      decoded && stateCookieValue && constantTimeEqual(decoded.nonce, stateCookieValue)
-        ? decoded.returnTo
-        : null;
-
-    const response = await fetch(`${env.AUTH_ISSUER_URL}/token`, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        code,
-        redirect_uri: `${env.APP_PUBLIC_URL}/api/auth/callback`,
-        grant_type: "authorization_code",
-        client_id: env.AUTH_CLIENT_ID,
-        code_verifier: "",
-      }),
-    });
-
-    const headers = new Headers();
-    headers.append("Set-Cookie", clearCookie(AUTH_STATE_COOKIE));
-
-    if (!response.ok) {
-      headers.append("Set-Cookie", clearCookie(AUTH_HINT_COOKIE, { httpOnly: false }));
-      return new Response(`Authentication failed: ${await response.text()}`, {
-        status: response.status,
-        headers,
+    let rawState;
+    try {
+      rawState = JSON.parse(getCookie(request, STATE_COOKIE) ?? "null");
+    } catch {
+      rawState = null;
+    }
+    const parsed = safeParse(LoginStateSchema, rawState);
+    if (
+      !parsed.success ||
+      !parsed.output.state ||
+      url.searchParams.get("state") !== parsed.output.state
+    ) {
+      return new Response("Invalid login state", {
+        status: 400,
+        headers: { "cache-control": "no-store" },
       });
     }
-
-    const tokens = await parseTokenResponse(response);
-    if (!tokens) {
-      headers.append("Set-Cookie", clearCookie(AUTH_HINT_COOKIE, { httpOnly: false }));
-      return new Response("Invalid token response", { status: 502, headers });
+    const { verifier, returnTo } = parsed.output;
+    const headers = new Headers({ "cache-control": "no-store", "referrer-policy": "no-referrer" });
+    headers.append("Set-Cookie", clearCookie(STATE_COOKIE));
+    const target = new URL(validateReturnTo(returnTo) ?? "/", origin);
+    if (url.searchParams.get("error") === "no_session") {
+      target.searchParams.set("error", "no_session");
+      headers.set("Location", target.toString());
+      return new Response(null, { status: 302, headers });
     }
-
-    const verified = await verifyAccessToken(tokens.accessToken, false);
-    const hintValue = verified.kind === "ok" ? verified.email : "";
-
-    headers.append("Set-Cookie", envAccessCookie(tokens.accessToken, tokens.expiresIn));
-    headers.append("Set-Cookie", envRefreshCookie(tokens.refreshToken));
-    if (hintValue) headers.append("Set-Cookie", hintCookie(hintValue));
-    headers.set("Location", returnTo ?? "/");
+    const code = url.searchParams.get("code");
+    if (!code || url.searchParams.has("error"))
+      return new Response("Login failed", { status: 400, headers });
+    const result = await rpc(() => env.AUTH.exchangeCode({ ...client, code, verifier }));
+    if (result.kind === "invalid")
+      return new Response("Login expired or already used. Please sign in again.", {
+        status: 400,
+        headers,
+      });
+    headers.append(
+      "Set-Cookie",
+      serializeCookie(SESSION_COOKIE, result.token, {
+        maxAge: Math.max(0, Math.floor((result.session.expiresAt - Date.now()) / 1000)),
+      }),
+    );
+    headers.append("Set-Cookie", hintCookie(result.session));
+    headers.set("Location", target.toString());
     return new Response(null, { status: 302, headers });
   }
 
-  function logout(): Response {
-    const headers = new Headers({ Location: "/" });
-    headers.append("Set-Cookie", clearCookie("auth_access_token"));
-    headers.append("Set-Cookie", clearCookie("auth_refresh_token"));
-    headers.append("Set-Cookie", clearCookie(AUTH_HINT_COOKIE, { httpOnly: false }));
-    headers.append("Set-Cookie", clearCookie(AUTH_STATE_COOKIE));
-    return new Response(null, { status: 302, headers });
+  async function logout(request: Request): Promise<Response> {
+    if (request.method !== "POST" || request.headers.get("origin") !== origin)
+      return new Response("Forbidden", { status: 403 });
+    const token = getCookie(request, SESSION_COOKIE);
+    if (token) await rpc(() => env.AUTH.revokeSession({ ...client, token }));
+    const headers = new Headers({ Location: "/?error=no_session", "cache-control": "no-store" });
+    for (const name of [SESSION_COOKIE, STATE_COOKIE])
+      headers.append("Set-Cookie", clearCookie(name));
+    headers.append("Set-Cookie", clearCookie(AUTH_HINT_COOKIE, false));
+    return new Response(null, { status: 303, headers });
   }
 
   async function sessionEndpoint(request: Request): Promise<Response> {
     const session = await requireSession(request);
-    const headers = new Headers({ "content-type": "application/json" });
-    if (session.tokens) {
-      headers.append(
-        "Set-Cookie",
-        envAccessCookie(session.tokens.access, session.tokens.expiresIn),
-      );
-      headers.append("Set-Cookie", envRefreshCookie(session.tokens.refresh));
-    }
-    headers.append("Set-Cookie", hintCookie(session.email));
-    return new Response(JSON.stringify({ user: { email: session.email } }), { headers });
+    return new Response(JSON.stringify({ user: { email: session.email } }), {
+      headers: {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+        "set-cookie": hintCookie(session),
+      },
+    });
   }
 
   async function gateHtml(
@@ -444,61 +287,28 @@ export function createAuthHandlers(env: AuthEnv) {
     options?: { publicPaths?: string[] },
   ): Promise<HtmlGateResult> {
     const url = new URL(request.url);
-
-    if (!isDocumentRequest(request)) {
-      return { kind: "proceed", session: null, setCookies: [] };
-    }
-
-    const publicPaths = options?.publicPaths ?? [];
     if (
-      publicPaths.some((prefix) => url.pathname === prefix || url.pathname.startsWith(`${prefix}/`))
+      !isDocumentRequest(request) ||
+      options?.publicPaths?.some(
+        (path) => url.pathname === path || url.pathname.startsWith(`${path}/`),
+      )
     ) {
       return { kind: "proceed", session: null, setCookies: [] };
     }
-
-    try {
-      const session = await authenticate(request, { refresh: true });
-      if (session) {
-        const setCookies: string[] = [];
-        if (session.tokens) {
-          setCookies.push(envAccessCookie(session.tokens.access, session.tokens.expiresIn));
-          setCookies.push(envRefreshCookie(session.tokens.refresh));
-        }
-        setCookies.push(hintCookie(session.email));
-        return { kind: "proceed", session, setCookies };
-      }
-    } catch {
-      // Verification failures collapse to the safe state: treat as unauthenticated.
-    }
-
-    const setCookies = [
-      clearCookie("auth_access_token"),
-      clearCookie("auth_refresh_token"),
-      clearCookie(AUTH_HINT_COOKIE, { httpOnly: false }),
-    ];
-
-    // Silent auth is one-shot. If the issuer already bounced us back with
-    // `no_session`, redirecting into another silent attempt would loop forever
-    // (gate → issuer → no_session → gate). Serve the SPA so the client can
-    // render its manual sign-in overlay instead.
-    if (url.searchParams.get("error") === "no_session") {
+    const session = await authenticate(request);
+    if (session) return { kind: "proceed", session, setCookies: [hintCookie(session)] };
+    const setCookies = [clearCookie(SESSION_COOKIE), clearCookie(AUTH_HINT_COOKIE, false)];
+    if (url.searchParams.get("error") === "no_session")
       return { kind: "proceed", session: null, setCookies };
-    }
-
-    const returnTo = validateReturnTo(`${url.pathname}${url.search}`);
-    const redirectResponse = await autoLoginRedirect(returnTo);
-    const headers = new Headers(redirectResponse.headers);
-    for (const cookie of setCookies) headers.append("Set-Cookie", cookie);
     return {
       kind: "redirect",
-      response: new Response(null, { status: redirectResponse.status, headers }),
+      response: withCookies(await autoLoginRedirect(`${url.pathname}${url.search}`), setCookies),
     };
   }
 
   return {
     authenticate,
     requireSession,
-    withSessionCookies,
     withCookies,
     loginRedirect,
     autoLoginRedirect,

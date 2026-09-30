@@ -1,3 +1,4 @@
+import AuthStack from "@shedflare/auth/stack";
 import { make } from "alchemy/Test/Vitest";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
@@ -11,11 +12,16 @@ const { test, afterAll, deploy, destroy } = make({
   providers: Cloudflare.providers(),
 });
 
-afterAll(live ? destroy(HomepageStack) : Effect.void);
+afterAll(
+  live
+    ? destroy(HomepageStack).pipe(Effect.ensuring(destroy(AuthStack).pipe(Effect.orDie)))
+    : Effect.void,
+);
 
 test.skipIf(!live)(
   "homepage endpoints respond correctly",
   Effect.gen(function* () {
+    yield* deploy(AuthStack);
     const deployed = yield* deploy(HomepageStack);
     const base = deployed.url;
     if (!base) throw new Error("Homepage deployment did not return a URL");

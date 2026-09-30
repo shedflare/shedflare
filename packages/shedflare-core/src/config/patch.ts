@@ -77,6 +77,17 @@ export function patchConfig<Patch>(
         appPatch.subdomain === null ? undefined : appPatch.subdomain,
       );
     }
+    if (appPatch.productionAliases === null) {
+      nextText = applyEdit(nextText, ["apps", appId, "productionAliases"], undefined);
+    } else {
+      for (const [stage, subdomain] of Object.entries(appPatch.productionAliases ?? {})) {
+        nextText = applyEdit(
+          nextText,
+          ["apps", appId, "productionAliases", stage],
+          subdomain === null ? undefined : subdomain,
+        );
+      }
+    }
     if (appPatch.vars === null) {
       nextText = applyEdit(nextText, ["apps", appId, "vars"], undefined);
       continue;

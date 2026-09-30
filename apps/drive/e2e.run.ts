@@ -1,3 +1,4 @@
+import AuthStack from "@shedflare/auth/stack";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Core from "alchemy/Test/Core";
 import { loadShedflareConfig } from "@shedflare/alchemy";
@@ -12,6 +13,7 @@ process.chdir(repositoryRoot);
 const stage =
   process.env.SHEDFLARE_DRIVE_E2E_STAGE ??
   `e2e-drive-${process.env.GITHUB_RUN_ID ?? process.env.CI_JOB_ID ?? Date.now()}`;
+if (!stage.startsWith("e2e-")) throw new Error("Browser E2E requires an isolated e2e- stage");
 const authEmail = process.env.SHEDFLARE_DRIVE_E2E_AUTH_EMAIL ?? loadShedflareConfig().ownerEmail;
 const authToken = process.env.SHEDFLARE_DRIVE_E2E_AUTH_TOKEN ?? crypto.randomUUID();
 
@@ -24,11 +26,16 @@ const options = {
 };
 
 async function deployDrive() {
+  await Core.run(Core.deploy(options, AuthStack, { stage }), options);
   return await Core.run(Core.deploy(options, DriveStack, { stage }), options);
 }
 
 async function destroyDrive() {
-  await Core.run(Core.destroy(options, DriveStack, { stage }), options);
+  try {
+    await Core.run(Core.destroy(options, DriveStack, { stage }), options);
+  } finally {
+    await Core.run(Core.destroy(options, AuthStack, { stage }), options);
+  }
 }
 
 async function waitForDrive(baseUrl: string) {

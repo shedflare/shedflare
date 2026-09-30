@@ -25,13 +25,14 @@
   },
   "scripts": {
     "build": "vp pack",
-    "check": "vp check src",
+    "check": "vp check src vite.config.ts",
     "typecheck": "vp check --no-fmt --no-lint",
     "test": "vp test"
   },
   "dependencies": {
     "@clack/prompts": "^1.2",
     "@shedflare/alchemy": "workspace:*",
+    "@shedflare/auth-client": "workspace:*",
     "@shedflare/core": "workspace:*",
     "cac": "^7",
     "nano-spawn": "^2.1",

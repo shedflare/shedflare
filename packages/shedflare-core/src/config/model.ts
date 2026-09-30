@@ -6,6 +6,8 @@ export interface LegacyAppSelection {
 export interface AppSelection {
   readonly subdomain?: string;
   readonly vars?: Readonly<Record<string, string>>;
+  /** Existing production consumers whose Alchemy ownership uses a legacy stage. */
+  readonly productionAliases?: Readonly<Record<string, string>>;
 }
 
 export interface ShedflareConfigV1 {
@@ -30,6 +32,7 @@ export type ShedflareConfig = ShedflareConfigV1 | ShedflareConfigV2;
 
 export interface ResolvedAppConfig {
   readonly appId: string;
+  readonly authStage: string;
   readonly domain: string;
   readonly configuredSubdomain: string;
   readonly stageSubdomain: string;
@@ -63,6 +66,7 @@ export interface ConfigMigration {
 export interface AppSelectionPatch {
   readonly subdomain?: string | null;
   readonly vars?: Readonly<Record<string, string | null>> | null;
+  readonly productionAliases?: Readonly<Record<string, string | null>> | null;
 }
 
 export interface ConfigPatch {

@@ -1,5 +1,5 @@
 // Client-safe auth helpers. This module is imported into browser bundles, so it
-// must NOT pull in server-only dependencies (jose, openauth, etc.). It is also
+// must NOT pull in server-only dependencies (Worker bindings, session storage, etc.). It is also
 // part of a package typechecked without the DOM lib, so `document` is reached
 // through a narrowly-typed globalThis accessor rather than the ambient global.
 

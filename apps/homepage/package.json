@@ -35,6 +35,7 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "catalog:",
     "@cloudflare/workers-types": "catalog:",
+    "@shedflare/auth": "workspace:*",
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
     "alchemy": "catalog:",

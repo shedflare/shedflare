@@ -1,3 +1,4 @@
+import type { AuthRpc } from "@shedflare/auth-client/contract";
 /**
  * Shared env factory for money tests.
  * Mirrors the surface money's worker hands to `createRouter(env)`.
@@ -10,7 +11,8 @@ import { createMoneyTestD1 } from "./d1-shim";
 export type MoneyTestEnv = {
   MONEY_DB: D1Shim;
   UPLOADS: R2Mock;
-  AUTH_ISSUER_URL: string;
+  AUTH: AuthRpc;
+  AUTH_URL: string;
   AUTH_CLIENT_ID: string;
   APP_PUBLIC_URL: string;
   OWNER_EMAIL: string;
@@ -22,7 +24,18 @@ export function createMoneyTestEnv(overrides?: Partial<MoneyTestEnv>): MoneyTest
   return {
     MONEY_DB: createMoneyTestD1(),
     UPLOADS: new R2Mock(),
-    AUTH_ISSUER_URL: "https://auth.test.example.com",
+    AUTH: {
+      async validateSession() {
+        throw new Error("Unexpected Auth RPC in local test");
+      },
+      async exchangeCode() {
+        throw new Error("Unexpected Auth RPC in local test");
+      },
+      async revokeSession() {
+        throw new Error("Unexpected Auth RPC in local test");
+      },
+    },
+    AUTH_URL: "https://auth.test.example.com",
     AUTH_CLIENT_ID: "shedflare-money-test",
     APP_PUBLIC_URL: "https://money.test.example.com",
     OWNER_EMAIL: "test@example.com",

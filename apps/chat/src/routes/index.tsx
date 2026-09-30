@@ -280,7 +280,9 @@ export default function Home() {
               <div class="sidebar-version">v{BUILD_INFO.version}</div>
               <div class="sidebar-footer-controls">
                 <button class="theme-btn active">night</button>
-                <button class="btn" onClick={() => window.location.href = "/api/auth/logout"}>Logout</button>
+                <form method="post" action="/api/auth/logout">
+                  <button class="btn" type="submit">Logout</button>
+                </form>
               </div>
             </div>
           </aside>

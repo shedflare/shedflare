@@ -1,13 +1,12 @@
-import * as Effect from "effect/Effect";
+import * as Config from "effect/Config";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 
-/** Resolve an operator secret from process.env at deploy time, if set. */
+/** Resolve an operator secret through Alchemy's environment/config provider, if set. */
 export function optionalSecretConfig(
   name: string,
-): Effect.Effect<Option.Option<Redacted.Redacted<string>>> {
-  return Effect.sync(() => {
-    const raw = process.env[name];
-    return raw ? Option.some(Redacted.make(raw)) : Option.none();
-  });
+): Config.Config<Option.Option<Redacted.Redacted<string>>> {
+  return Config.option(Config.redacted(name)).pipe(
+    Config.map(Option.filter((secret) => Redacted.value(secret).length > 0)),
+  );
 }

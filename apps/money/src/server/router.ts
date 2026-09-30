@@ -65,16 +65,10 @@ export function createRouter(env: Env) {
             : await auth.loginRedirect(returnTo);
         }
         if (url.pathname === "/api/auth/callback" && method === "GET") {
-          if (url.searchParams.get("error") === "no_session") {
-            const redirectUrl = new URL("/", url.origin);
-            redirectUrl.searchParams.set("error", "no_session");
-            const headers = new Headers({ Location: redirectUrl.toString() });
-            headers.append("Set-Cookie", auth.serializeCookie("auth_state", "", { maxAge: 0 }));
-            return new Response(null, { status: 302, headers });
-          }
           return await auth.handleCallback(request);
         }
-        if (url.pathname === "/api/auth/logout" && method === "POST") return auth.logout();
+        if (url.pathname === "/api/auth/logout" && method === "POST")
+          return await auth.logout(request);
         if (url.pathname === "/api/session" && method === "GET")
           return await auth.sessionEndpoint(request);
 

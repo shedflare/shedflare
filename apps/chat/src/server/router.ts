@@ -1,5 +1,5 @@
 import { createHttpApiWebHandler } from "@shedflare/alchemy";
-import { createAuthHandlers } from "@shedflare/auth-client/consumer";
+import { createAuthHandlers, type AuthEnv } from "@shedflare/auth-client/consumer";
 import { setRuntimeEnv } from "#/runtime";
 import { chatApi } from "./definitions";
 import { createBootstrapGroup, createModelsGroup, createUploadsGroup } from "./impl/all";
@@ -35,11 +35,7 @@ const withVersionHeader = (response: Response) => {
   return wrapped;
 };
 
-type RawEnv = {
-  APP_PUBLIC_URL: string;
-  AUTH_ISSUER_URL?: string;
-  AUTH_CLIENT_ID?: string;
-  OWNER_EMAIL: string;
+type RawEnv = AuthEnv & {
   OPENCODE_GO_API_KEY: string;
   UPLOAD_TOKEN_SECRET: string;
   EXA_API_KEY?: string;
@@ -49,12 +45,7 @@ type RawEnv = {
 };
 
 export function createRouter(env: RawEnv) {
-  const auth = createAuthHandlers({
-    AUTH_ISSUER_URL: env.AUTH_ISSUER_URL ?? env.APP_PUBLIC_URL,
-    AUTH_CLIENT_ID: env.AUTH_CLIENT_ID ?? "shedflare-chat",
-    APP_PUBLIC_URL: env.APP_PUBLIC_URL,
-    OWNER_EMAIL: env.OWNER_EMAIL,
-  });
+  const auth = createAuthHandlers(env);
 
   const wh = createHttpApiWebHandler(chatApi, [
     createBootstrapGroup(),
@@ -93,13 +84,6 @@ export function createRouter(env: RawEnv) {
           }
 
           if (pathname === "/api/auth/callback" && method === "GET") {
-            if (url.searchParams.get("error") === "no_session") {
-              const redirectUrl = new URL("/", url.origin);
-              redirectUrl.searchParams.set("error", "no_session");
-              const headers = new Headers({ Location: redirectUrl.toString() });
-              headers.append("Set-Cookie", auth.serializeCookie("auth_state", "", { maxAge: 0 }));
-              return withVersionHeader(new Response(null, { status: 302, headers }));
-            }
             const startedAt = Date.now();
             const response = await auth.handleCallback(request);
             logger.log("auth_callback_completed", { durationMs: Date.now() - startedAt });
@@ -107,7 +91,7 @@ export function createRouter(env: RawEnv) {
           }
 
           if (pathname === "/api/auth/logout" && method === "POST") {
-            return withVersionHeader(auth.logout());
+            return withVersionHeader(await auth.logout(request));
           }
 
           if (pathname === "/api/session" && method === "GET") {
@@ -153,7 +137,10 @@ export function createRouter(env: RawEnv) {
 
         const headers = new Headers(assetResponse.headers);
         for (const cookie of gate.setCookies) headers.append("Set-Cookie", cookie);
-        headers.set("cache-control", "public, max-age=31536000, immutable");
+        headers.set(
+          "cache-control",
+          auth.isDocumentRequest(request) ? "no-store" : "public, max-age=31536000, immutable",
+        );
         headers.set("x-shedflare-version", BUILD_INFO.version);
         return new Response(assetResponse.body, {
           status: assetResponse.status,

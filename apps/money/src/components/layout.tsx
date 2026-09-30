@@ -160,19 +160,6 @@ export default function Layout(props: RouteSectionProps) {
     await redo();
   });
 
-  async function signOut(): Promise<void> {
-    try {
-      await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
-    } finally {
-      if (globalThis.localStorage) {
-        globalThis.localStorage.removeItem("money.clientId");
-        globalThis.localStorage.removeItem("money.lastServerSeq");
-        globalThis.localStorage.removeItem("money.pendingOps");
-      }
-      window.location.href = "/";
-    }
-  }
-
   const shellActions = { openTransaction, openSearch };
 
   return (
@@ -261,9 +248,11 @@ export default function Layout(props: RouteSectionProps) {
               <kbd>⌘K</kbd>
               Search &amp; commands
             </button>
-            <button type="button" class="btn btn-ghost btn-sm" onClick={signOut}>
-              Sign out
-            </button>
+            <form method="post" action="/api/auth/logout">
+              <button type="submit" class="btn btn-ghost btn-sm">
+                Sign out
+              </button>
+            </form>
           </div>
         </aside>
 
@@ -349,10 +338,12 @@ export default function Layout(props: RouteSectionProps) {
                 <span aria-hidden="true">⌕</span>
                 <span>Search &amp; commands</span>
               </button>
-              <button type="button" class="mobile-menu-item" onClick={signOut}>
-                <span aria-hidden="true">⇥</span>
-                <span>Sign out</span>
-              </button>
+              <form method="post" action="/api/auth/logout">
+                <button type="submit" class="mobile-menu-item">
+                  <span aria-hidden="true">⇥</span>
+                  <span>Sign out</span>
+                </button>
+              </form>
             </div>
           </div>
         </Show>

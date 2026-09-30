@@ -49,7 +49,7 @@ export const DriveStack = Alchemy.Stack(
         DB: db,
         FILES: filesBucket,
         APP_PUBLIC_URL: config.url,
-        AUTH_ISSUER_URL: yield* Shedflare.authIssuerUrl(),
+        AUTH_URL: yield* Shedflare.authUrl("drive"),
         AUTH_CLIENT_ID: `shedflare-drive`,
         OWNER_EMAIL: config.ownerEmail,
         ...e2eAuth,
@@ -63,6 +63,8 @@ export const DriveStack = Alchemy.Stack(
       binding: "SECURE_UPLOAD_TOKEN_SECRET",
       value: secureUploadToken.text,
     });
+
+    yield* Shedflare.bindAuth(worker, "drive");
 
     return {
       app: "drive" as const,

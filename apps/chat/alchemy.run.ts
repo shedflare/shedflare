@@ -36,7 +36,7 @@ export const ChatStack = Alchemy.Stack(
         UPLOADS: uploads,
         SYNC_ENGINE: syncEngine,
         APP_PUBLIC_URL: config.url,
-        AUTH_ISSUER_URL: yield* Shedflare.authIssuerUrl(),
+        AUTH_URL: yield* Shedflare.authUrl("chat"),
         AUTH_CLIENT_ID: `shedflare-chat`,
         OWNER_EMAIL: config.ownerEmail,
         DEFAULT_MODEL_ID: Shedflare.optionalVar(config, "DEFAULT_MODEL_ID", "auto"),
@@ -83,6 +83,8 @@ export const ChatStack = Alchemy.Stack(
         required: false,
       });
     }
+
+    yield* Shedflare.bindAuth(worker, "chat");
 
     return {
       app: "chat" as const,

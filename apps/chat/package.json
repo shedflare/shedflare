@@ -33,7 +33,6 @@
   "dependencies": {
     "@cloudflare/puppeteer": "^1.1.0",
     "@effect/sql-sqlite-do": "catalog:",
-    "@openauthjs/openauth": "^0.4.3",
     "@shedflare/alchemy": "workspace:*",
     "@shedflare/auth-client": "workspace:*",
     "@shedflare/sync-protocol": "workspace:*",
@@ -52,7 +51,6 @@
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "highlight.js": "catalog:",
-    "jose": "catalog:",
     "marked": "catalog:",
     "marked-highlight": "catalog:",
     "openai": "catalog:",
@@ -64,6 +62,7 @@
     "@cloudflare/vite-plugin": "catalog:",
     "@cloudflare/vitest-pool-workers": "catalog:",
     "@cloudflare/workers-types": "catalog:",
+    "@shedflare/auth": "workspace:*",
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
     "alchemy": "catalog:",
@@ -90,8 +89,8 @@
       "APP_PUBLIC_URL": {
         "description": "The canonical public URL of the app. This is configured as a plain Wrangler var because it is not secret."
       },
-      "AUTH_ISSUER_URL": {
-        "description": "Canonical public URL of the central Shedflare Auth issuer."
+      "AUTH_URL": {
+        "description": "Canonical public URL of the central Shedflare Auth login page."
       },
       "AUTH_CLIENT_ID": {
         "description": "OAuth client ID used by this app when talking to Shedflare Auth."

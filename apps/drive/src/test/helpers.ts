@@ -1,3 +1,4 @@
+import type { AuthRpc } from "@shedflare/auth-client/contract";
 import { drizzle } from "drizzle-orm/d1";
 import { asD1Database, createTestD1, type D1Shim } from "./d1-shim";
 import { R2Mock, createR2Mock } from "./r2-mock";
@@ -6,7 +7,8 @@ import { files, tags, fileTags } from "../db/schema";
 export type TestEnv = {
   DB: D1Shim;
   FILES: R2Mock;
-  AUTH_ISSUER_URL: string;
+  AUTH: AuthRpc;
+  AUTH_URL: string;
   AUTH_CLIENT_ID: string;
   APP_PUBLIC_URL: string;
   SECURE_UPLOAD_TOKEN_SECRET: string;
@@ -19,7 +21,18 @@ export function createTestEnv(overrides?: Partial<TestEnv>): TestEnv {
   return {
     DB: createTestD1(),
     FILES: createR2Mock(),
-    AUTH_ISSUER_URL: "https://auth.test.example.com",
+    AUTH: {
+      async validateSession() {
+        throw new Error("Unexpected Auth RPC in local test");
+      },
+      async exchangeCode() {
+        throw new Error("Unexpected Auth RPC in local test");
+      },
+      async revokeSession() {
+        throw new Error("Unexpected Auth RPC in local test");
+      },
+    },
+    AUTH_URL: "https://auth.test.example.com",
     AUTH_CLIENT_ID: "shedflare-drive-test",
     APP_PUBLIC_URL: "https://drive.test.example.com",
     SECURE_UPLOAD_TOKEN_SECRET: "test-secure-upload-token-secret-at-least-32-bytes",

@@ -1,3 +1,5 @@
+import { function_, object, safeParse } from "valibot";
+import type { AuthRpc } from "@shedflare/auth-client/contract";
 import {
   createId,
   type ExternalValue,
@@ -16,16 +18,27 @@ export const AppEnvConfig = Schema.Struct({
   OPENCODE_GO_MODEL_CAPABILITIES: Schema.optional(Schema.String),
   DEFAULT_MODEL_ID: Schema.String,
   APP_PUBLIC_URL: Schema.String,
-  AUTH_ISSUER_URL: Schema.optional(Schema.String),
-  AUTH_CLIENT_ID: Schema.optional(Schema.String),
+  AUTH_URL: Schema.String,
+  AUTH_CLIENT_ID: Schema.String,
   UPLOAD_TOKEN_SECRET: Schema.String,
-  GOOGLE_CLIENT_ID: Schema.optional(Schema.String),
   OWNER_EMAIL: Schema.String,
   DEV_AUTH_EMAIL: Schema.optional(Schema.String),
   EXA_API_KEY: Schema.optional(Schema.String),
   UPLOADS: Schema.Any,
   SYNC_ENGINE: Schema.Any,
-  OPENAUTH_STORAGE: Schema.optional(Schema.Any),
+  // Workers owns this binding. Validate its callable surface without copying the
+  // RPC object: method lookup must retain the native receiver.
+  AUTH: Schema.declare<AuthRpc>(
+    (input): input is AuthRpc =>
+      safeParse(
+        object({
+          validateSession: function_(),
+          exchangeCode: function_(),
+          revokeSession: function_(),
+        }),
+        input,
+      ).success,
+  ),
   /** Cloudflare Browser Rendering binding. Present when `browser` is wired
    *  up in wrangler.jsonc; absent on local builds without the binding.
    *  The extract tool degrades gracefully when this is missing. */

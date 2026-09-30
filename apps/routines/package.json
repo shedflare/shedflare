@@ -64,8 +64,8 @@
       "OWNER_EMAIL": {
         "description": "Required owner email..."
       },
-      "AUTH_ISSUER_URL": {
-        "description": "Canonical public URL of the central Shedflare Auth issuer."
+      "AUTH_URL": {
+        "description": "Canonical public URL of the central Shedflare Auth login page."
       },
       "AUTH_CLIENT_ID": {
         "description": "OAuth client ID used by this app when talking to Shedflare Auth."

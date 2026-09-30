@@ -12,7 +12,6 @@ import {
 } from "#/domain";
 import * as Schema from "effect/Schema";
 import { applyPartialSnapshot } from "./sync-adapter";
-import { authFetch } from "./auth-fetch";
 
 export type ThreadSummaryPage = {
   serverSeq: number;
@@ -44,7 +43,7 @@ function decodeThreadSummaryPage(value: ExternalValue): ThreadSummaryPage {
 }
 
 async function fetchJson(url: URL | string): Promise<ExternalValue> {
-  const response = await authFetch(url);
+  const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`History request failed: ${response.status}`);
   }
