@@ -1,4 +1,5 @@
 import { index, integer, sqliteTable, text, primaryKey } from "drizzle-orm/sqlite-core";
+import { CATEGORY_ICON_NAMES } from "../domain/category-icons";
 
 // ---------------------------------------------------------------------------
 // accounts
@@ -37,6 +38,7 @@ export const categories = sqliteTable(
   {
     id: text("id").primaryKey(),
     name: text("name").notNull(),
+    icon: text("icon", { enum: CATEGORY_ICON_NAMES }),
     isIncome: integer("is_income", { mode: "boolean" }).notNull().default(false),
     groupId: text("group_id").references(() => categoryGroups.id, { onDelete: "set null" }),
     sortOrder: integer("sort_order").notNull().default(0),

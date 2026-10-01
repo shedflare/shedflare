@@ -6,6 +6,32 @@ Currently built as a Cloudflare Worker-backed SolidJS SPA with REST APIs, D1 SQL
 
 Durable Objects, WebSocket sync, TanStack DB collections, and IndexedDB offline snapshots are target architecture ideas from the replacement plan, not shipped behavior today.
 
+Home is the everyday view: category balances, quick expense entry, recent activity, and upcoming
+payments. Budget is the monthly planning view: allocations, targets, and money held for next month.
+Open a category from either view to record spending, assign money, move funds, or edit its target.
+Moving money commits both sides together and supports undo. Existing account ledgers, imports,
+reconciliation, schedules, and reports remain available.
+
+Indonesian rupiah is supported throughout the budget: choose it in Settings → Currency.
+Automatic number formatting uses `Rp1.250.000`, with whole-rupiah entry and grouped amounts in
+transactions, assignments, targets, transfers, balances, and schedules. Mobile layouts make room
+for longer amounts. Currency is a single-budget preference; it does not convert existing data.
+
+Categories can use an outline icon or their initial. Choose one when adding a category or from
+its drawer's settings; the saved choice appears on Home and Budget and supports undo.
+
+Try the interface locally with sample data, without Cloudflare credentials or resource creation:
+
+```bash
+pnpm --filter @shedflare/money dev:demo
+# Indonesian rupiah sample data
+MONEY_DEMO_CURRENCY=IDR pnpm --filter @shedflare/money dev:demo
+```
+
+Open `http://localhost:5173`. The demo runs the real REST router with an in-memory SQLite database;
+sample changes reset when the process stops. It listens only on loopback. Normal app development
+and deployed E2E workflows remain separate.
+
 ---
 
 ## What It Is
@@ -22,7 +48,7 @@ Shedflare Money is a zero-based budgeting (envelope budgeting) app for personal 
 
 - **Envelope budgeting** — assign income to categories, track leftover, carryover between months
 - **Buffer** — hold money aside for next month
-- **Budget actions** — cover overspending, transfer between categories, copy previous month, set averages (3-month, N-month), zero out, goal templates
+- **Budget actions** — cover overspending, move money between categories, fill missing assignments from the previous month
 - **5 goal template types** — monthly (fixed amount), byDate (save by deadline), refill (maintain target balance), periodic (every N months), percentage (% of monthly income)
 - **Budgeted minus spending = leftover** (computed live via SQL queries, not stored)
 
@@ -43,22 +69,14 @@ Shedflare Money is a zero-based budgeting (envelope budgeting) app for personal 
 - **Rule test UI** — preview which existing transactions would match a rule
 - **CSV import** — upload CSV files, parse, run rules, insert/update transactions
 
-### Reporting & Dashboard
+### Home & Reports
 
-- **Dynamic dashboard** — 10 configurable widget types on a resizable grid:
-  - Summary card (individual stat cards)
-  - Overview summary (4 stats in one row)
-  - Net worth over time (area chart)
-  - Cash flow (bar chart)
-  - Spending by category (donut chart)
-  - Budget analysis (bar chart)
-  - Age of money (days metric)
-  - Calendar heatmap (daily spending intensity)
-  - FI-RE crossover projection (4% rule)
-  - Markdown notes
-- **Built-in reports** — net worth history, cash flow, spending breakdown, budget analysis, age of money, calendar heatmap, FI-RE projection
+- **Home** — available category balances, overspending, quick entry, recent activity, and scheduled payments
+- **Built-in reports** — net worth history, cash flow, spending breakdown, budget analysis, age of money
 - **Custom reports** — save reports with filter conditions, grouping, sorting, and graph types
-- **Dashboard export/import** — JSON backup of widget layouts
+
+Home replaces the configurable widget dashboard. Existing widget records and dashboard APIs remain
+in D1, but the old dashboard grid and its layout import/export controls are not part of the Home UI.
 
 ### Sync & Offline
 

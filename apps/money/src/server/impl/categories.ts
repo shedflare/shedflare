@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { moneyApi } from "../definitions";
 import { createDb } from "../d1-access";
@@ -23,6 +23,7 @@ export function createCategoriesGroup(env: Env) {
             .select({
               id: s.categories.id,
               name: s.categories.name,
+              icon: s.categories.icon,
               isIncome: s.categories.isIncome,
               groupId: s.categories.groupId,
               sortOrder: s.categories.sortOrder,
@@ -30,7 +31,7 @@ export function createCategoriesGroup(env: Env) {
               goalDef: s.categories.goalDef,
               createdAt: s.categories.createdAt,
               updatedAt: s.categories.updatedAt,
-              group_name: s.categoryGroups.name,
+              group_name: sql<string | null>`${s.categoryGroups.name}`.as("group_name"),
             })
             .from(s.categories)
             .leftJoin(s.categoryGroups, eq(s.categories.groupId, s.categoryGroups.id))

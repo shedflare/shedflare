@@ -1,7 +1,7 @@
 /**
  * Settings page — currency, budget type, exchange rate, export, privacy, display.
  */
-import { createSignal, createEffect, onCleanup } from "solid-js";
+import { createSignal, createEffect, onCleanup, Show } from "solid-js";
 import { dispatch } from "../lib/pending-ops";
 import { api } from "../lib/api";
 import { settingsCollection } from "../lib/collections";
@@ -11,22 +11,42 @@ import { PageState } from "../components/PageState";
 import * as Schema from "effect/Schema";
 
 type BudgetType = "envelope" | "tracking";
-type Currency = "USD" | "IDR";
+import type { CurrencyCode as Currency, NumberFormat } from "../domain/money-amount";
 type DateFormat = "iso" | "us" | "eu";
-type NumberFormat = "comma-dot" | "dot-comma" | "space-dot";
+type NumberFormatPreference = NumberFormat | "auto";
 const CurrencySchema = Schema.Literals(["USD", "IDR"]);
 const DateFormatSchema = Schema.Literals(["iso", "us", "eu"]);
 const FirstDaySchema = Schema.Literals(["sunday", "monday"]);
-const NumberFormatSchema = Schema.Literals(["comma-dot", "dot-comma", "space-dot"]);
+const NumberFormatSchema = Schema.Literals(["auto", "comma-dot", "dot-comma", "space-dot"]);
 
 export default function SettingsPage() {
   const [exchangeRate, setExchangeRate] = createSignal(16000);
   const [budgetType, setBudgetType] = createSignal<BudgetType>("envelope");
   const [currency, setCurrency] = createSignal<Currency>("USD");
-  const [numberFormat, setNumberFormat] = createSignal<NumberFormat>("comma-dot");
+  const [numberFormat, setNumberFormat] = createSignal<NumberFormatPreference>("auto");
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
   const privacy = usePrivacyMode();
+  type DisplaySetting = { key: "display_currency" | "number_format"; value: string };
+  const [displaySave, setDisplaySave] = createSignal<
+    | { state: "idle" }
+    | ({ state: "saving" } & DisplaySetting)
+    | ({ state: "failed"; message: string } & DisplaySetting)
+  >({ state: "idle" });
+  async function saveDisplaySetting(setting: DisplaySetting) {
+    setDisplaySave({ state: "saving", ...setting });
+    try {
+      await dispatch("update_setting", setting).promise;
+      setDisplaySave({ state: "idle" });
+      setSetting(setting.key, setting.value);
+    } catch (caught) {
+      setDisplaySave({
+        state: "failed",
+        ...setting,
+        message: caught instanceof Error ? caught.message : "Could not save setting.",
+      });
+    }
+  }
 
   const [dateFormat, setDateFormat] = createSignal<DateFormat>("iso");
   const [hideClosed, setHideClosed] = createSignal(false);
@@ -50,7 +70,10 @@ export default function SettingsPage() {
     }
 
     const currencySetting = settingsCollection.state.get("display_currency")?.value;
-    if (currencySetting === "USD" || currencySetting === "IDR") {
+    if (
+      displaySave().state === "idle" &&
+      (currencySetting === "USD" || currencySetting === "IDR")
+    ) {
       setCurrency(currencySetting);
     }
 
@@ -72,7 +95,8 @@ export default function SettingsPage() {
     if (fdw === "sunday" || fdw === "monday") setFirstDayOfWeek(fdw);
 
     const nf = settingsCollection.state.get("number_format")?.value;
-    if (nf === "comma-dot" || nf === "dot-comma" || nf === "space-dot") setNumberFormat(nf);
+    if (displaySave().state === "idle")
+      setNumberFormat(nf === "comma-dot" || nf === "dot-comma" || nf === "space-dot" ? nf : "auto");
   }
 
   async function loadPageData() {
@@ -104,8 +128,7 @@ export default function SettingsPage() {
 
   function updateCurrency(value: Currency) {
     setCurrency(value);
-    dispatch("update_setting", { key: "display_currency", value });
-    setSetting("display_currency", value);
+    void saveDisplaySetting({ key: "display_currency", value });
   }
 
   function updateDateFormat(value: DateFormat) {
@@ -133,10 +156,9 @@ export default function SettingsPage() {
     setSetting("first_day_of_week", value);
   }
 
-  function updateNumberFormat(value: NumberFormat) {
+  function updateNumberFormat(value: NumberFormatPreference) {
     setNumberFormat(value);
-    dispatch("update_setting", { key: "number_format", value });
-    setSetting("number_format", value);
+    void saveDisplaySetting({ key: "number_format", value });
   }
 
   function handleExport() {
@@ -225,20 +247,44 @@ export default function SettingsPage() {
 
         {/* Display Currency */}
         <div class="settings-section">
-          <h2>Display Currency</h2>
-          <p class="settings-description">Choose your primary display currency.</p>
+          <h2>
+            <label for="money-currency">Currency</label>
+          </h2>
           <select
+            id="money-currency"
+            disabled={displaySave().state === "saving"}
             value={currency()}
             onChange={(e) =>
               updateCurrency(Schema.decodeUnknownSync(CurrencySchema)(e.currentTarget.value))
             }
             style="max-width:200px"
           >
-            <option value="USD">USD ($)</option>
-            <option value="IDR">IDR (Rp)</option>
+            <option value="USD">US dollar ($)</option>
+            <option value="IDR">Indonesian rupiah (Rp)</option>
           </select>
         </div>
 
+        <Show when={displaySave().state === "failed"}>
+          <div class="inline-save-error" role="alert">
+            <span>
+              {(() => {
+                const save = displaySave();
+                return save.state === "failed" ? save.message : "";
+              })()}
+            </span>
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm"
+              onClick={() => {
+                const save = displaySave();
+                if (save.state === "failed")
+                  void saveDisplaySetting({ key: save.key, value: save.value });
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        </Show>
         {/* Date Format */}
         <div class="settings-section">
           <h2>Date Format</h2>
@@ -274,11 +320,15 @@ export default function SettingsPage() {
 
         {/* Number Format */}
         <div class="settings-section">
-          <h2>Number Format</h2>
+          <h2>
+            <label for="money-number-format">Number Format</label>
+          </h2>
           <p class="settings-description">
             Choose how numbers are formatted (thousands/decimal separators).
           </p>
           <select
+            id="money-number-format"
+            disabled={displaySave().state === "saving"}
             value={numberFormat()}
             onChange={(e) =>
               updateNumberFormat(
@@ -287,9 +337,10 @@ export default function SettingsPage() {
             }
             style="max-width:200px"
           >
-            <option value="comma-dot">1,234.56 (US/UK/Asia)</option>
-            <option value="dot-comma">1.234,56 (Europe)</option>
-            <option value="space-dot">1 234.56 (ISO)</option>
+            <option value="auto">Automatic (currency)</option>
+            <option value="comma-dot">1,234.56</option>
+            <option value="dot-comma">1.234,56 (Indonesia)</option>
+            <option value="space-dot">1 234.56</option>
           </select>
         </div>
 

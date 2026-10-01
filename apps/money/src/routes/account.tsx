@@ -6,9 +6,11 @@ import { useCurrency } from "../lib/currency";
 import { usePrivacyMode } from "../lib/privacy";
 import TransactionFilters from "../components/TransactionFilters";
 import TransactionTable from "../components/TransactionTable";
+import MoneyDialog from "../components/MoneyDialog";
 import { PageState } from "../components/PageState";
 import { useMoneyShell } from "../components/MoneyShellContext";
-import { listenForMoneyDataChanged } from "../lib/data-events";
+import { parseCsv } from "../domain/csv-import";
+import { emitMoneyDataChanged, listenForMoneyDataChanged } from "../lib/data-events";
 import type { TagInfo, TransactionPatch, TransactionRow } from "../components/TransactionTable";
 import type { Condition } from "../components/TransactionFilters";
 import type {
@@ -342,17 +344,27 @@ function ImportModal(props: { accountId: string; onClose: () => void }) {
 
   async function handleImport() {
     const f = file();
-    if (!f) return;
+    if (!f || importing()) return;
     setImporting(true);
+    setResult(null);
 
     try {
+      const parsed = parseCsv(await f.text());
+      if (parsed.errors.length || parsed.rows.length === 0) {
+        setResult({
+          added: 0,
+          errors: parsed.errors.length ? parsed.errors : ["No transactions found."],
+        });
+        return;
+      }
       const result = await execute("import_transactions", {
         accountId: props.accountId,
-        transactions: [{ date: new Date().toISOString().slice(0, 10), amount: 0 }],
+        transactions: parsed.rows,
         isPreview: false,
       });
       if (result.ok) {
-        setResult({ added: 0, errors: [] });
+        setResult({ added: result.data.added ?? 0, errors: [...(result.data.errors ?? [])] });
+        emitMoneyDataChanged();
       } else {
         setResult({ added: 0, errors: [result.error] });
       }
@@ -364,47 +376,47 @@ function ImportModal(props: { accountId: string; onClose: () => void }) {
   }
 
   return (
-    <div class="modal-overlay" onClick={props.onClose}>
-      <div class="modal" onClick={(e) => e.stopPropagation()}>
-        <div class="modal-header">
-          <h2>Import CSV</h2>
-          <button class="modal-close" onClick={props.onClose}>
-            ✕
-          </button>
-        </div>
-        <div class="modal-body">
-          <p>Drag and drop a CSV file from your bank, or click to select.</p>
-          <input
-            type="file"
-            accept=".csv,.tsv"
-            onChange={(e) => setFile(e.currentTarget.files?.[0] ?? null)}
-          />
-          <Show when={file()}>
-            <p class="file-info">
-              {file()?.name} ({((file()?.size ?? 0) / 1024).toFixed(1)} KB)
-            </p>
-          </Show>
-          <Show when={result()}>
-            <div class="import-result">
-              <p>Added: {result()?.added} transactions</p>
-              <Show when={(result()?.errors.length ?? 0) > 0}>
-                <ul>
-                  <For each={result()?.errors}>{(err) => <li>{err}</li>}</For>
-                </ul>
-              </Show>
-            </div>
-          </Show>
-        </div>
+    <MoneyDialog title="Import CSV" onClose={props.onClose} busy={importing()}>
+      <div class="money-form">
+        <input
+          aria-label="CSV file"
+          type="file"
+          accept=".csv,.tsv"
+          disabled={importing()}
+          onChange={(e) => {
+            setFile(e.currentTarget.files?.[0] ?? null);
+            setResult(null);
+          }}
+        />
+        <Show when={file()}>
+          <p class="file-info">
+            {file()?.name} ({((file()?.size ?? 0) / 1024).toFixed(1)} KB)
+          </p>
+        </Show>
+        <Show when={result()}>
+          <div class="import-result">
+            <p role="status">Added: {result()?.added} transactions</p>
+            <Show when={(result()?.errors.length ?? 0) > 0}>
+              <ul role="alert">
+                <For each={result()?.errors}>{(err) => <li>{err}</li>}</For>
+              </ul>
+            </Show>
+          </div>
+        </Show>
         <div class="form-actions">
-          <button class="btn btn-ghost" onClick={props.onClose}>
+          <button class="btn btn-ghost" onClick={props.onClose} disabled={importing()}>
             Cancel
           </button>
-          <button class="btn btn-primary" onClick={handleImport} disabled={!file() || importing()}>
-            {importing() ? "Importing..." : "Import"}
+          <button
+            class="btn btn-primary"
+            onClick={handleImport}
+            disabled={!file() || importing() || (result()?.added ?? 0) > 0}
+          >
+            {importing() ? "Importing..." : result()?.errors.length ? "Retry import" : "Import"}
           </button>
         </div>
       </div>
-    </div>
+    </MoneyDialog>
   );
 }
 
@@ -431,13 +443,14 @@ function ReconcileModal(props: {
   };
 
   const diff = createMemo(() => {
-    const sb = fmt().parseInput(statementBalance());
+    const sb = fmt().parseInput(statementBalance() || "0");
     return sb - props.runningBalance;
   });
 
   const isBalanced = () => diff() === 0;
 
   async function handleFinish() {
+    if (!Number.isSafeInteger(diff())) return;
     setProcessing(true);
 
     const now = new Date().toISOString();
@@ -518,8 +531,8 @@ function ReconcileModal(props: {
               <div class="reconcile-row">
                 <span class="reconcile-label">Statement balance:</span>
                 <input
-                  type="number"
-                  step={fmt().code === "IDR" ? "1" : "0.01"}
+                  type="text"
+                  inputmode={fmt().inputMode}
                   class="reconcile-input"
                   placeholder="0"
                   value={statementBalance()}
@@ -536,7 +549,9 @@ function ReconcileModal(props: {
                 }}
               >
                 <span class="reconcile-label">Difference:</span>
-                <span class="reconcile-value">{fmt().formatCents(diff())}</span>
+                <span class="reconcile-value">
+                  {Number.isSafeInteger(diff()) ? fmt().formatCents(diff()) : "—"}
+                </span>
               </div>
             </div>
 
@@ -562,7 +577,7 @@ function ReconcileModal(props: {
             <button
               class="btn btn-primary"
               onClick={handleFinish}
-              disabled={processing() || statementBalance() === ""}
+              disabled={processing() || statementBalance() === "" || !Number.isSafeInteger(diff())}
             >
               {processing() ? "Reconciling..." : "Finish Reconciliation"}
             </button>

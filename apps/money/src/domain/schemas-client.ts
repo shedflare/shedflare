@@ -1,4 +1,5 @@
 import * as S from "effect/Schema";
+import { CategoryIconSchema } from "./category-icons";
 import {
   AccountIdSchema,
   TransactionIdSchema,
@@ -148,6 +149,7 @@ const TransactionApiSchema = S.Struct({
 const CategoryApiSchema = S.Struct({
   id: CategoryIdSchema,
   name: S.String,
+  icon: S.optional(S.NullOr(CategoryIconSchema)),
   isIncome: S.Boolean,
   groupId: S.NullOr(CategoryGroupIdSchema),
   sortOrder: S.Number,
@@ -403,7 +405,15 @@ export const SettingsResponseSchema = S.Struct({
   ),
 });
 export const CommandResponseSchema = S.Union([
-  S.Struct({ ok: S.Literal(true), data: S.Struct({ id: S.optional(S.String) }) }),
+  S.Struct({
+    ok: S.Literal(true),
+    data: S.Struct({
+      id: S.optional(S.String),
+      added: S.optional(S.Number),
+      updated: S.optional(S.Number),
+      errors: S.optional(S.Array(S.String)),
+    }),
+  }),
   S.Struct({ ok: S.Literal(false), error: S.String }),
 ]);
 

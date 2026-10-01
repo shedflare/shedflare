@@ -1,88 +1,71 @@
-import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
 import { A, useLocation, useNavigate, type RouteSectionProps } from "@solidjs/router";
 import { createHotkey } from "@tanstack/solid-hotkeys";
 import CommandBar from "./CommandBar";
 import AddTransactionModal from "./AddTransactionModal";
 import ToastCenter from "./ToastCenter";
+import MoneyIcon, { type MoneyIconName } from "./MoneyIcon";
+import MoneyDialog from "./MoneyDialog";
 import { MoneyShellProvider, type OpenTransactionOptions } from "./MoneyShellContext";
-import { undo, redo, undoStack, redoStack } from "../lib/undo-stack";
+import { undo, redo, undoStack, redoStack, historyBusy } from "../lib/undo-stack";
 import { BUILD_INFO } from "../lib/build-info";
 import { loadSettings } from "../lib/settings-store";
+import { useCurrency } from "../lib/currency";
 import { api } from "../lib/api";
 import type { AccountsResponse, CategoriesResponse } from "../domain/schemas-client";
 
 interface NavItem {
   path: string;
   label: string;
-  icon: string;
+  icon: MoneyIconName;
   activePaths?: string[];
 }
 
 type AccountRow = Pick<AccountsResponse["accounts"][number], "id" | "name" | "closed">;
 type CategoryRow = Pick<CategoriesResponse["categories"][number], "id" | "name"> & {
   groupName: string | null;
+  isIncome: boolean;
 };
 
 const PRIMARY_NAV: NavItem[] = [
-  { path: "/", label: "Overview", icon: "⌂" },
-  { path: "/transactions", label: "Transactions", icon: "↔" },
-  { path: "/budget", label: "Budget", icon: "◫", activePaths: ["/budget", "/categories"] },
-  { path: "/accounts", label: "Accounts", icon: "▣", activePaths: ["/accounts"] },
+  { path: "/", label: "Home", icon: "home" },
+  { path: "/budget", label: "Budget", icon: "budget" },
+  { path: "/transactions", label: "Activity", icon: "activity" },
+  { path: "/accounts", label: "Accounts", icon: "accounts" },
   {
     path: "/schedules",
-    label: "Automations",
-    icon: "↻",
-    activePaths: ["/schedules", "/rules"],
+    label: "Scheduled",
+    icon: "calendar",
+    activePaths: ["/schedules"],
   },
 ];
 
 const SECONDARY_NAV: NavItem[] = [
-  { path: "/reports", label: "Reports", icon: "⌁" },
-  { path: "/categories", label: "Categories & goals", icon: "▤" },
-  { path: "/payees", label: "Payees", icon: "◎" },
-  { path: "/rules", label: "Rules", icon: "⚙" },
-  { path: "/tags", label: "Tags", icon: "◇" },
-  { path: "/settings", label: "Settings & data", icon: "☷" },
+  { path: "/reports", label: "Reports", icon: "chart" },
+  { path: "/categories", label: "Categories", icon: "budget" },
+  { path: "/payees", label: "Payees", icon: "activity" },
+  { path: "/rules", label: "Rules", icon: "settings" },
+  { path: "/tags", label: "Tags", icon: "more" },
+  { path: "/settings", label: "Settings", icon: "settings" },
 ];
 
 type MobileNavItem =
-  | { kind: "route"; path: string; label: string; icon: string }
-  | { kind: "add"; label: string; icon: string };
+  | { kind: "route"; path: string; label: string; icon: MoneyIconName }
+  | { kind: "add"; label: string; icon: MoneyIconName };
 
 const MOBILE_BOTTOM_NAV: MobileNavItem[] = [
-  { kind: "route", path: "/", label: "Home", icon: "⌂" },
-  { kind: "route", path: "/transactions", label: "Activity", icon: "↔" },
-  { kind: "add", label: "Add", icon: "+" },
-  { kind: "route", path: "/budget", label: "Budget", icon: "◫" },
-  { kind: "route", path: "/accounts", label: "Accounts", icon: "▣" },
+  { kind: "route", path: "/", label: "Home", icon: "home" },
+  { kind: "route", path: "/budget", label: "Budget", icon: "budget" },
+  { kind: "add", label: "Add", icon: "plus" },
+  { kind: "route", path: "/transactions", label: "Activity", icon: "activity" },
+  { kind: "route", path: "/accounts", label: "Accounts", icon: "accounts" },
 ];
 
 function ShellModal(props: { title: string; children: JSX.Element; onClose: () => void }) {
-  onMount(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") props.onClose();
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    onCleanup(() => document.removeEventListener("keydown", handleKeyDown));
-  });
-
   return (
-    <div class="modal-overlay" onClick={props.onClose}>
-      <div
-        class="modal shell-modal"
-        role="dialog"
-        aria-modal="true"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div class="modal-header">
-          <h2>{props.title}</h2>
-          <button type="button" class="modal-close" onClick={props.onClose} aria-label="Close">
-            ×
-          </button>
-        </div>
-        {props.children}
-      </div>
-    </div>
+    <MoneyDialog title={props.title} onClose={props.onClose}>
+      <div class="money-form">{props.children}</div>
+    </MoneyDialog>
   );
 }
 
@@ -117,11 +100,14 @@ export default function Layout(props: RouteSectionProps) {
         accountData.accounts.map(({ id, name, closed }) => ({ id, name, closed })),
       );
       setComposerCategories(
-        categoryData.categories.map(({ id, name, group_name }) => ({
-          id,
-          name,
-          groupName: group_name ?? null,
-        })),
+        categoryData.categories
+          .filter((category) => !category.hidden)
+          .map(({ id, name, group_name, isIncome }) => ({
+            id,
+            name,
+            groupName: group_name ?? null,
+            isIncome,
+          })),
       );
     } catch (caught) {
       setComposerError(
@@ -162,13 +148,14 @@ export default function Layout(props: RouteSectionProps) {
 
   const shellActions = { openTransaction, openSearch };
 
+  const currency = useCurrency();
   return (
     <MoneyShellProvider value={shellActions}>
-      <div class="app-layout">
+      <div class="app-layout" data-currency={currency().code}>
         <aside class="sidebar">
           <div class="sidebar-header">
             <span class="sidebar-logo" aria-hidden="true">
-              💰
+              <span class="money-brand-mark">m</span>
             </span>
             <span class="sidebar-title">Money</span>
           </div>
@@ -178,7 +165,7 @@ export default function Layout(props: RouteSectionProps) {
               {(item) => (
                 <A href={item.path} class="nav-item" classList={{ active: isActive(item) }}>
                   <span class="nav-icon" aria-hidden="true">
-                    {item.icon}
+                    <MoneyIcon name={item.icon} />
                   </span>
                   <span class="nav-label">{item.label}</span>
                 </A>
@@ -188,7 +175,7 @@ export default function Layout(props: RouteSectionProps) {
             <details class="sidebar-more" open={SECONDARY_NAV.some(isActive)}>
               <summary class="nav-item">
                 <span class="nav-icon" aria-hidden="true">
-                  •••
+                  <MoneyIcon name="more" />
                 </span>
                 <span class="nav-label">More</span>
               </summary>
@@ -201,7 +188,7 @@ export default function Layout(props: RouteSectionProps) {
                       classList={{ active: isActive(item) }}
                     >
                       <span class="nav-icon" aria-hidden="true">
-                        {item.icon}
+                        <MoneyIcon name={item.icon} />
                       </span>
                       <span class="nav-label">{item.label}</span>
                     </A>
@@ -212,14 +199,11 @@ export default function Layout(props: RouteSectionProps) {
           </nav>
 
           <div class="sidebar-footer">
-            <div class="build-marker" title={BUILD_INFO.tooltip}>
-              {BUILD_INFO.label}
-            </div>
             <div class="sidebar-undo">
               <button
                 type="button"
                 class="btn btn-icon btn-ghost btn-sm"
-                disabled={undoStack().length === 0}
+                disabled={historyBusy() || undoStack().length === 0}
                 onClick={async () => {
                   await undo();
                 }}
@@ -231,7 +215,7 @@ export default function Layout(props: RouteSectionProps) {
               <button
                 type="button"
                 class="btn btn-icon btn-ghost btn-sm"
-                disabled={redoStack().length === 0}
+                disabled={historyBusy() || redoStack().length === 0}
                 onClick={async () => {
                   await redo();
                 }}
@@ -248,20 +232,33 @@ export default function Layout(props: RouteSectionProps) {
               <kbd>⌘K</kbd>
               Search &amp; commands
             </button>
-            <form method="post" action="/api/auth/logout">
-              <button type="submit" class="btn btn-ghost btn-sm">
-                Sign out
-              </button>
-            </form>
+            <details class="sidebar-session">
+              <summary>
+                Session <MoneyIcon name="more" size={16} />
+              </summary>
+              <div class="build-marker" title={BUILD_INFO.tooltip}>
+                {BUILD_INFO.label}
+              </div>
+              <form method="post" action="/api/auth/logout">
+                <button type="submit" class="btn btn-ghost btn-sm">
+                  Sign out
+                </button>
+              </form>
+            </details>
           </div>
         </aside>
 
         <div class="desktop-toolbar" aria-label="Quick actions">
-          <button type="button" class="btn btn-secondary" onClick={openSearch}>
-            Search
+          <span class="suite-label">
+            Shedflare <span>/</span> Money
+          </span>
+          <button type="button" class="toolbar-search" onClick={openSearch}>
+            <MoneyIcon name="search" size={17} />
+            Search<kbd>⌘ K</kbd>
           </button>
           <button type="button" class="btn btn-primary" onClick={() => openTransaction()}>
-            + Transaction
+            <MoneyIcon name="plus" size={17} />
+            Add
           </button>
         </div>
 
@@ -273,7 +270,7 @@ export default function Layout(props: RouteSectionProps) {
             onClick={openSearch}
             aria-label="Search"
           >
-            ⌕
+            <MoneyIcon name="search" />
           </button>
           <button
             type="button"
@@ -281,7 +278,7 @@ export default function Layout(props: RouteSectionProps) {
             onClick={() => setShowMobileMenu(true)}
             aria-label="Open more navigation"
           >
-            •••
+            <MoneyIcon name="more" />
           </button>
         </header>
 
@@ -305,7 +302,7 @@ export default function Layout(props: RouteSectionProps) {
                   ×
                 </button>
               </div>
-              <For each={SECONDARY_NAV}>
+              <For each={[PRIMARY_NAV[4], ...SECONDARY_NAV]}>
                 {(item) => (
                   <button
                     type="button"
@@ -316,7 +313,7 @@ export default function Layout(props: RouteSectionProps) {
                       setShowMobileMenu(false);
                     }}
                   >
-                    <span aria-hidden="true">{item.icon}</span>
+                    <MoneyIcon name={item.icon} />
                     <span>{item.label}</span>
                   </button>
                 )}
@@ -325,7 +322,7 @@ export default function Layout(props: RouteSectionProps) {
               <button
                 type="button"
                 class="mobile-menu-item"
-                disabled={undoStack().length === 0}
+                disabled={historyBusy() || undoStack().length === 0}
                 onClick={async () => {
                   await undo();
                   setShowMobileMenu(false);
@@ -370,7 +367,7 @@ export default function Layout(props: RouteSectionProps) {
                 }}
               >
                 <span class="tab-icon" aria-hidden="true">
-                  {item.icon}
+                  <MoneyIcon name={item.icon} />
                 </span>
                 <span class="tab-label">{item.label}</span>
               </button>
@@ -387,10 +384,14 @@ export default function Layout(props: RouteSectionProps) {
             <Show
               when={!composerLoading() && !composerError()}
               fallback={
-                <ShellModal title="Add Transaction" onClose={() => setTransactionRequest(null)}>
+                <ShellModal title="Add transaction" onClose={() => setTransactionRequest(null)}>
                   <Show
                     when={!composerLoading()}
-                    fallback={<p class="text-muted">Preparing accounts and categories…</p>}
+                    fallback={
+                      <p class="text-muted" role="status">
+                        Loading…
+                      </p>
+                    }
                   >
                     <div class="form-error">{composerError()}</div>
                     <div class="form-actions">
@@ -405,21 +406,17 @@ export default function Layout(props: RouteSectionProps) {
               <Show
                 when={composerAccounts().some((account) => !account.closed)}
                 fallback={
-                  <ShellModal
-                    title="Create an account first"
-                    onClose={() => setTransactionRequest(null)}
-                  >
-                    <p class="text-muted">A transaction needs an open account.</p>
+                  <ShellModal title="Add an account" onClose={() => setTransactionRequest(null)}>
                     <div class="form-actions">
                       <button
                         type="button"
                         class="btn btn-primary"
                         onClick={() => {
                           setTransactionRequest(null);
-                          navigate("/accounts");
+                          navigate("/accounts?new=1");
                         }}
                       >
-                        Go to Accounts
+                        Add account
                       </button>
                     </div>
                   </ShellModal>
@@ -429,6 +426,7 @@ export default function Layout(props: RouteSectionProps) {
                   accounts={composerAccounts()}
                   categories={composerCategories()}
                   initialAccountId={request().initialAccountId}
+                  initialCategoryId={request().initialCategoryId}
                   onClose={() => setTransactionRequest(null)}
                   onCreated={request().onCreated}
                 />

@@ -15,20 +15,20 @@ Worker router, handler, and database schema. A file existing under `src` does no
 the app uses it. Saved route copies and old sync helpers are not the current Chat UI; Money's
 sync-shaped names do not imply a running sync engine.
 
-| Area          | Entry points to read                                                                                                                  | Current state authority / boundary                                                                                                                                  |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Anki          | `apps/anki/src/app.tsx`, `src/server/handlers.ts`                                                                                     | D1 decks/cards/reviews; browser overview, capture draft, and review display state.                                                                                  |
-| Auth          | `apps/auth/src/worker.ts`, `src/openauth.ts`, `src/sessions.ts`, `src/db/schema.ts`                                                   | OpenAuth owns Google sign-in using its KV binding. D1 owns opaque central/app sessions and handoffs; apps validate through RPC and linked sessions revoke together. |
-| CF Bill       | `apps/cf-bill/src/routes/index.tsx`, `src/server/impl/usage.ts`                                                                       | Cloudflare API observations. Missing/failed observations are not measured zero or authoritative billing data.                                                       |
-| Chat          | `apps/chat/src/app.tsx` → `src/routes/index.tsx` → `src/api/chat.ts`                                                                  | Current UI uses localStorage indexes, TanStack IndexedDB transcripts, and `/api/chat` SSE. Existing DO sync/persistence/backups remain separate; see below.         |
-| Discord       | `apps/discord/src/router.ts`, `src/handlers/message-create.ts`, `src/gateway/durable-object.ts`, `src/conversation/durable-object.ts` | Gateway state and per-channel conversation history in separate DOs. Owner Discord ID gates mention handling.                                                        |
-| Drive         | `apps/drive/src/context.tsx`, `src/lib/upload.ts`, `src/server/impl/files.ts`, `src/server/impl/secure-uploads.ts`                    | D1 metadata/upload state; R2 bytes; browser query/selection/upload UI. Independent production lifecycle outside suite deployment.                                   |
-| Homepage      | `apps/homepage/src/routes/index.tsx`, `src/routes/projects.tsx`, `src/server/router.ts`                                               | D1 projects/experiences; configuration controls public reads; admin writes remain protected.                                                                        |
-| Money         | `apps/money/src/lib/api.ts`, `src/domain/commands.ts`, `src/server/command-handlers/handle-command.ts`, `src/db/schema.ts`            | REST + D1; browser route data, settings cache, and in-memory undo/redo. No active Money DO, WebSocket replay, or global offline queue.                              |
-| Observability | `apps/observability/src/worker.ts`, root `alchemy.run.ts`                                                                             | Tail events stored in D1; root stack wires consumers. Current filtering does not capture every handled HTTP/application failure.                                    |
-| Routines      | `apps/routines/src/context.tsx`, `src/server/handlers.ts`, `src/types.ts`                                                             | D1 routines/completions/settings; optimistic browser state and fetched date ranges.                                                                                 |
-| Links (`s`)   | `apps/s/src/routes/index.tsx`, `src/server/router.ts`, `src/server/impl/links.ts`                                                     | D1 links; public redirects and owner-protected management. Stable app ID/package is `s`.                                                                            |
-| Site          | `site/src/app.tsx`, `site/src/content.ts`                                                                                             | Public copy; some claims predate the current monorepo/state models. Verify against manifests and app code.                                                          |
+| Area          | Entry points to read                                                                                                                  | Current state authority / boundary                                                                                                                                      |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Anki          | `apps/anki/src/app.tsx`, `src/server/handlers.ts`                                                                                     | D1 decks/cards/reviews; browser overview, capture draft, and review display state.                                                                                      |
+| Auth          | `apps/auth/src/worker.ts`, `src/openauth.ts`, `src/sessions.ts`, `src/db/schema.ts`                                                   | OpenAuth owns Google sign-in using its KV binding. D1 owns opaque central/app sessions and handoffs; apps validate through RPC and linked sessions revoke together.     |
+| CF Bill       | `apps/cf-bill/src/routes/index.tsx`, `src/server/impl/usage.ts`                                                                       | Cloudflare API observations. Missing/failed observations are not measured zero or authoritative billing data.                                                           |
+| Chat          | `apps/chat/src/app.tsx` → `src/routes/index.tsx` → `src/api/chat.ts`                                                                  | Current UI uses localStorage indexes, TanStack IndexedDB transcripts, and `/api/chat` SSE. Existing DO sync/persistence/backups remain separate; see below.             |
+| Discord       | `apps/discord/src/router.ts`, `src/handlers/message-create.ts`, `src/gateway/durable-object.ts`, `src/conversation/durable-object.ts` | Gateway state and per-channel conversation history in separate DOs. Owner Discord ID gates mention handling.                                                            |
+| Drive         | `apps/drive/src/context.tsx`, `src/lib/upload.ts`, `src/server/impl/files.ts`, `src/server/impl/secure-uploads.ts`                    | D1 metadata/upload state; R2 bytes; browser query/selection/upload UI. Independent production lifecycle outside suite deployment.                                       |
+| Homepage      | `apps/homepage/src/routes/index.tsx`, `src/routes/projects.tsx`, `src/server/router.ts`                                               | D1 projects/experiences; configuration controls public reads; admin writes remain protected.                                                                            |
+| Money         | `apps/money/src/app.tsx` → `src/routes/index.tsx`, `src/routes/budget.tsx`, `src/components/CategoryDrawer.tsx`, `src/lib/api.ts`     | REST + D1; Home and Budget read the same month/category records. Browser route resources, settings cache, and in-memory undo/redo. No active Money DO or offline queue. |
+| Observability | `apps/observability/src/worker.ts`, root `alchemy.run.ts`                                                                             | Tail events stored in D1; root stack wires consumers. Current filtering does not capture every handled HTTP/application failure.                                        |
+| Routines      | `apps/routines/src/context.tsx`, `src/server/handlers.ts`, `src/types.ts`                                                             | D1 routines/completions/settings; optimistic browser state and fetched date ranges.                                                                                     |
+| Links (`s`)   | `apps/s/src/routes/index.tsx`, `src/server/router.ts`, `src/server/impl/links.ts`                                                     | D1 links; public redirects and owner-protected management. Stable app ID/package is `s`.                                                                                |
+| Site          | `site/src/app.tsx`, `site/src/content.ts`                                                                                             | Public copy; some claims predate the current monorepo/state models. Verify against manifests and app code.                                                              |
 
 Paths following an app's first path in a row are relative to that app.
 
@@ -97,6 +97,47 @@ event/command journals, and history endpoints. Scheduled R2 backups still export
 Treat this as an unresolved migration boundary. Verify history reachability, backup, restore, and
 deletion before removing either path. Earlier Chat deepdives explain the older path and require
 verification before use as implementation instructions.
+
+## Money everyday and planning flows
+
+The registered `/` route shows expense-category balances, recent activity, upcoming schedules, and
+accounts. `/budget` owns monthly allocation, monthly target comparisons, and category creation.
+Both use `src/components/CategoryDrawer.tsx` for category activity, assignments, targets, and the
+shared move-money dialog. Income and hidden categories are excluded from spendable envelopes.
+The displayed available total is a sum of category balances, not a bank balance or a safe-to-spend forecast.
+
+`src/lib/request-state.ts` keeps failed route requests explicit without a second data cache. Home's
+budget, activity, and schedule reads fail/retry independently. Failed writes retain their form
+drafts; successful writes and undo/redo emit `money:data-changed` to refetch server records. Amounts
+and goals remain in D1; the quick composer remembers only the last account in browser storage.
+
+Money's single budget currency is selected by the persisted `display_currency` setting (USD or IDR).
+`src/domain/money-amount.ts` owns strict amount parsing and currency-default separators;
+`src/lib/currency.ts` reads the existing settings cache reactively for every amount surface.
+IDR defaults to Indonesian grouping and whole rupiah, including amount inputs. Explicit
+`number_format` preferences still apply; `auto` follows the currency. Settings update the cache
+only after a successful write and retain failed selections for retry. Integer storage remains
+100 units per dollar or rupiah; changing the currency preference never converts existing records.
+The account CSV modal parses the selected file through `src/domain/csv-import.ts`, validates
+all rows before sending `import_transactions`, shows persisted import counts, and refreshes
+the account after success. Parse/network failures retain the selected file for retry.
+The local demo accepts
+`MONEY_DEMO_CURRENCY=IDR` to seed realistic million-rupiah sample values.
+
+Category icons are optional, validated keys stored in `categories.icon`; the Drizzle schema and
+`src/domain/category-icons.ts` define the supported set. `CategoryIconPicker.tsx` edits the same
+category record used by Home, Budget, and the category drawer. Initials remain the default for
+existing categories. The additive `20260930224007_category_icons` migration preserves their data.
+
+`transfer_budget` and `cover_overspending` in `src/server/command-handlers/budget.ts` write both
+assignments in a transactional Drizzle D1 batch. Relative updates preserve assignment totals;
+positive, integer amounts and distinct expense categories are validated. The reverse command can
+restore overspending during undo. Budget-engine formulas remain unchanged.
+`/transactions` accepts exact category/month and transaction-focus links.
+
+`pnpm --filter @shedflare/money dev:demo` runs the real REST router with isolated, in-memory SQLite
+sample data and a loopback-only client preview. It creates no Cloudflare resources and is separate
+from the deployed-browser E2E lifecycle.
 
 ## Shared package ownership
 

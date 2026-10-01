@@ -1,5 +1,6 @@
 import * as schema from "../db/schema";
 import { createId, nowIso } from "./types";
+import type { CategoryIcon } from "./category-icons";
 
 // ---------------------------------------------------------------------------
 // Factory functions produce validated row objects ready for DB insertion.
@@ -35,11 +36,13 @@ export function createCategory(input: {
   groupId: string | null;
   isIncome?: boolean;
   sortOrder?: number;
+  icon?: CategoryIcon | null;
 }) {
   const now = nowIso();
   return {
     id: createId("cat"),
     name: input.name,
+    icon: input.icon ?? null,
     isIncome: input.isIncome ?? false,
     groupId: input.groupId,
     sortOrder: input.sortOrder ?? 0,

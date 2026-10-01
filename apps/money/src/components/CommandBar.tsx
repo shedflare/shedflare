@@ -60,12 +60,12 @@ export default function CommandBar(props: { open: boolean; onClose: () => void }
   const [schedules, setSchedules] = createSignal<ScheduleRow[]>([]);
 
   const pages: CmdResult[] = [
-    { id: "/", label: "Overview", icon: "⌂", action: () => navigate("/") },
+    { id: "/", label: "Home", icon: "⌂", action: () => navigate("/") },
     { id: "/budget", label: "Budget", icon: "💰", action: () => navigate("/budget") },
     { id: "/accounts", label: "Accounts", icon: "🏦", action: () => navigate("/accounts") },
     {
       id: "/transactions",
-      label: "All Transactions",
+      label: "Activity",
       icon: "💳",
       action: () => navigate("/transactions"),
     },

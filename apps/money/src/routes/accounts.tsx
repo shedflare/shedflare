@@ -2,7 +2,7 @@
  * Accounts page — list of all accounts with balances.
  */
 import { createSignal, createMemo, For, Show, createEffect, onCleanup, onMount } from "solid-js";
-import { useNavigate } from "@solidjs/router";
+import { useNavigate, useSearchParams } from "@solidjs/router";
 import { dispatch } from "../lib/pending-ops";
 import { api } from "../lib/api";
 import { useCurrency } from "../lib/currency";
@@ -11,6 +11,8 @@ import { settingsCollection } from "../lib/collections";
 import { PageState } from "../components/PageState";
 import { useAccountForm } from "../lib/forms/accounts";
 import { listenForMoneyDataChanged } from "../lib/data-events";
+import MoneyDialog from "../components/MoneyDialog";
+import MoneyIcon from "../components/MoneyIcon";
 
 interface AccountRow {
   id: string;
@@ -23,12 +25,15 @@ interface AccountRow {
 
 export default function AccountsPage() {
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams<{ new?: string }>();
   const fmt = useCurrency();
   const privacyBlur = usePrivacyMode();
   const [accounts, setAccounts] = createSignal<AccountRow[]>([]);
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
-  const [showAddForm, setShowAddForm] = createSignal(false);
+  const [showAddForm, setShowAddForm] = createSignal(params.new === "1");
+  const [saving, setSaving] = createSignal(false);
+  const [saveError, setSaveError] = createSignal<string | null>(null);
   const [hideClosed, setHideClosed] = createSignal(false);
 
   const { values, errors, setValues, validate, resetForm } = useAccountForm();
@@ -68,17 +73,24 @@ export default function AccountsPage() {
     if (!validate()) return;
 
     const name = values.name.trim();
-    const balance = values.balance ? parseFloat(values.balance) : undefined;
-    const op = dispatch("create_account", {
-      name,
-      offBudget: values.offbudget,
-      balance: balance ? Math.round(balance * 100) : undefined,
-    });
-
-    setShowAddForm(false);
-    resetForm();
-    await op.promise;
-    await loadAccounts();
+    const balance = values.balance ? fmt().parseInput(values.balance) : undefined;
+    if (balance !== undefined && !Number.isSafeInteger(balance)) {
+      setSaveError("Enter a valid balance.");
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await dispatch("create_account", { name, offBudget: values.offbudget, balance }).promise;
+      setShowAddForm(false);
+      setParams({ new: undefined });
+      resetForm();
+      await loadAccounts();
+    } catch (caught) {
+      setSaveError(caught instanceof Error ? caught.message : "Could not create account");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleDeleteAccount(account: AccountRow) {
@@ -121,8 +133,15 @@ export default function AccountsPage() {
     <div class="page">
       <div class="page-header">
         <h1 class="page-title">Accounts</h1>
-        <button class="btn btn-primary btn-sm" onClick={() => setShowAddForm(true)}>
-          + Add Account
+        <button
+          class="btn btn-primary"
+          onClick={() => {
+            setSaveError(null);
+            setShowAddForm(true);
+          }}
+        >
+          <MoneyIcon name="plus" />
+          Account
         </button>
       </div>
 
@@ -136,53 +155,63 @@ export default function AccountsPage() {
       </Show>
 
       <Show when={showAddForm()}>
-        <div class="modal-overlay" onClick={() => setShowAddForm(false)}>
-          <div class="modal" onClick={(e) => e.stopPropagation()}>
-            <div class="modal-header">
-              <h2>Add Account</h2>
-              <button class="modal-close" onClick={() => setShowAddForm(false)}>
-                ✕
+        <MoneyDialog
+          title="New account"
+          onClose={() => {
+            setShowAddForm(false);
+            setParams({ new: undefined });
+          }}
+          busy={saving()}
+        >
+          <form class="money-form" onSubmit={handleSubmit}>
+            <div class="form-group">
+              <label for="account-name">Name</label>
+              <input
+                id="account-name"
+                autofocus
+                disabled={saving()}
+                type="text"
+                placeholder="e.g. Checking, Savings, Credit Card"
+                value={values.name}
+                onInput={(e) => setValues("name", e.currentTarget.value)}
+                class={errors.name ? "input-error" : ""}
+              />
+              {errors.name && <span class="error-message">{errors.name.message}</span>}
+            </div>
+            <div class="form-group">
+              <label for="account-balance">Starting balance</label>
+              <input
+                id="account-balance"
+                disabled={saving()}
+                type="text"
+                inputmode={fmt().inputMode}
+                placeholder={fmt().code === "IDR" ? "0" : "0.00"}
+                value={values.balance || ""}
+                onInput={(e) => setValues("balance", e.currentTarget.value)}
+              />
+            </div>
+            <div class="form-check">
+              <input
+                type="checkbox"
+                id="off-budget"
+                checked={values.offbudget}
+                disabled={saving()}
+                onChange={(e) => setValues("offbudget", e.currentTarget.checked)}
+              />
+              <label for="off-budget">Keep outside the budget</label>
+            </div>
+            <Show when={saveError()}>
+              <p class="form-error" role="alert">
+                {saveError()}
+              </p>
+            </Show>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary btn-full" disabled={saving()}>
+                {saving() ? "Creating…" : "Add account"}
               </button>
             </div>
-            <form onSubmit={handleSubmit}>
-              <div class="form-group">
-                <label>Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Checking, Savings, Credit Card"
-                  value={values.name}
-                  onInput={(e) => setValues("name", e.currentTarget.value)}
-                  class={errors.name ? "input-error" : ""}
-                />
-                {errors.name && <span class="error-message">{errors.name.message}</span>}
-              </div>
-              <div class="form-group">
-                <label>Starting Balance (optional)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={values.balance || ""}
-                  onInput={(e) => setValues("balance", e.currentTarget.value)}
-                />
-              </div>
-              <div class="form-check">
-                <input
-                  type="checkbox"
-                  id="off-budget"
-                  checked={values.offbudget}
-                  onChange={(e) => setValues("offbudget", e.currentTarget.checked)}
-                />
-                <label for="off-budget">Off-budget (e.g. credit card, investment)</label>
-              </div>
-              <div class="form-actions">
-                <button type="submit" class="btn btn-primary">
-                  Create
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          </form>
+        </MoneyDialog>
       </Show>
 
       <PageState
@@ -197,10 +226,28 @@ export default function AccountsPage() {
             offBudgetAccounts().length > 0 ||
             closedAccounts().length > 0
           }
-          fallback={<div class="empty-state">No accounts yet. Create one above.</div>}
+          fallback={
+            <div class="first-step">
+              <MoneyIcon name="accounts" size={36} />
+              <h2>Start with your everyday account.</h2>
+              <button class="btn btn-primary" onClick={() => setShowAddForm(true)}>
+                Add account
+              </button>
+            </div>
+          }
         >
+          <div class="accounts-summary">
+            <span class="metric-label">Total balance</span>
+            <strong class={privacyBlur().blurClass()}>
+              {fmt().formatCents(
+                accounts()
+                  .filter((account) => !account.closed)
+                  .reduce((sum, account) => sum + (account.balanceCurrent ?? 0), 0),
+              )}
+            </strong>
+          </div>
           <RenderAccountGroup
-            title="On Budget"
+            title="In your budget"
             accounts={onBudgetAccounts()}
             navigate={navigate}
             formatBalance={formatBalance}
@@ -209,7 +256,7 @@ export default function AccountsPage() {
             blurClass={privacyBlur().blurClass()}
           />
           <RenderAccountGroup
-            title="Off Budget"
+            title="Outside your budget"
             accounts={offBudgetAccounts()}
             navigate={navigate}
             formatBalance={formatBalance}

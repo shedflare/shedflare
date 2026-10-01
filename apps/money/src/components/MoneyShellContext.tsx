@@ -2,6 +2,7 @@ import { createContext, useContext, type JSX } from "solid-js";
 
 export type OpenTransactionOptions = {
   initialAccountId?: string;
+  initialCategoryId?: string;
   onCreated?: () => void | Promise<void>;
 };
 

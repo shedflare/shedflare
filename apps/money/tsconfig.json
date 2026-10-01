@@ -18,6 +18,7 @@
   "include": [
     "src",
     "build",
+    "dev-demo.ts",
     "vite.config.ts",
     "worker-configuration.d.ts",
     "alchemy.run.ts",

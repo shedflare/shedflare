@@ -13,30 +13,45 @@ export interface UndoEntry {
 
 const [undoStack, setUndoStack] = createSignal<UndoEntry[]>([]);
 const [redoStack, setRedoStack] = createSignal<UndoEntry[]>([]);
+const [historyBusy, setHistoryBusy] = createSignal(false);
 
-export { undoStack, redoStack };
+export { undoStack, redoStack, historyBusy };
 
-function retargetRecreatedEntry(entry: UndoEntry, resultData: CommandData): UndoEntry {
+function retargetRecreatedEntry(
+  entry: UndoEntry,
+  resultData: CommandData,
+  direction: "undo" | "redo",
+): UndoEntry {
   let restoredId: string;
   try {
     restoredId = Schema.decodeUnknownSync(Schema.String)(resultData.id);
   } catch {
     return entry;
   }
+  const deletion = direction === "undo" ? entry.forward : entry.inverse;
+  const creation = direction === "undo" ? entry.inverse : entry.forward;
   if (
-    !entry.forward.commandType.startsWith("delete_") ||
-    !entry.inverse.commandType.startsWith("create_") ||
-    !(entry.forward.payload instanceof Object)
+    !deletion.commandType.startsWith("delete_") ||
+    !creation.commandType.startsWith("create_") ||
+    !(deletion.payload instanceof Object)
   ) {
     return entry;
   }
   return {
     ...entry,
-    forward: {
-      ...entry.forward,
-      payload: { ...entry.forward.payload, id: restoredId },
+    [direction === "undo" ? "forward" : "inverse"]: {
+      ...deletion,
+      payload: { ...deletion.payload, id: restoredId },
     },
   };
+}
+
+async function replayCommand(command: UndoEntry["forward"]): ReturnType<typeof execute> {
+  try {
+    return await execute(command.commandType, command.payload);
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Connection failed" };
+  }
 }
 
 export function push(label: string, forward: UndoEntry["forward"], inverse: UndoEntry["inverse"]) {
@@ -45,12 +60,15 @@ export function push(label: string, forward: UndoEntry["forward"], inverse: Undo
 }
 
 export async function undo() {
+  if (historyBusy()) return false;
   const stack = undoStack();
   if (stack.length === 0) return false;
   const entry = stack[stack.length - 1];
+  setHistoryBusy(true);
   setUndoStack((prev) => prev.slice(0, -1));
   setRedoStack((prev) => [...prev, entry]);
-  const result = await execute(entry.inverse.commandType, entry.inverse.payload);
+  const result = await replayCommand(entry.inverse);
+  setHistoryBusy(false);
   if (!result.ok) {
     setUndoStack((prev) => [...prev, entry]);
     setRedoStack((prev) => prev.slice(0, -1));
@@ -61,7 +79,7 @@ export async function undo() {
     });
     return false;
   }
-  const restoredEntry = retargetRecreatedEntry(entry, result.data);
+  const restoredEntry = retargetRecreatedEntry(entry, result.data, "undo");
   if (restoredEntry !== entry) {
     setRedoStack((prev) => [...prev.slice(0, -1), restoredEntry]);
   }
@@ -71,12 +89,15 @@ export async function undo() {
 }
 
 export async function redo() {
+  if (historyBusy()) return false;
   const stack = redoStack();
   if (stack.length === 0) return false;
   const entry = stack[stack.length - 1];
+  setHistoryBusy(true);
   setRedoStack((prev) => prev.slice(0, -1));
   setUndoStack((prev) => [...prev, entry]);
-  const result = await execute(entry.forward.commandType, entry.forward.payload);
+  const result = await replayCommand(entry.forward);
+  setHistoryBusy(false);
   if (!result.ok) {
     setRedoStack((prev) => [...prev, entry]);
     setUndoStack((prev) => prev.slice(0, -1));
@@ -87,6 +108,8 @@ export async function redo() {
     });
     return false;
   }
+  const restoredEntry = retargetRecreatedEntry(entry, result.data, "redo");
+  if (restoredEntry !== entry) setUndoStack((prev) => [...prev.slice(0, -1), restoredEntry]);
   emitOperationFeedback({ kind: "success", message: `${entry.label} redone`, undoable: false });
   emitMoneyDataChanged();
   return true;

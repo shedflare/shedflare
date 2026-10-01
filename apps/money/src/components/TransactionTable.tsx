@@ -62,6 +62,7 @@ interface UndoCommand {
 }
 
 interface TransactionTableProps {
+  focusId?: string;
   transactions: TransactionRow[];
   categories: CategoryRow[];
   txTags: Record<string, TagInfo[]>;
@@ -188,6 +189,10 @@ export default function TransactionTable(props: TransactionTableProps) {
   function saveEdit(tx: TransactionRow, field: TxField, value: string) {
     if (field === "amount") {
       const cents = fmt().parseInput(value);
+      if (!Number.isSafeInteger(cents)) {
+        emitOperationFeedback({ kind: "error", message: "Enter a valid amount.", undoable: false });
+        return;
+      }
       if (cents !== tx.amount) {
         applyOptimisticPatch(tx, { amount: cents }, { amount: cents }, "Update amount");
       }
@@ -410,6 +415,7 @@ export default function TransactionTable(props: TransactionTableProps) {
                 <div
                   class="tx-row"
                   classList={{
+                    focused: tx.id === props.focusId,
                     uncleared: !tx.cleared,
                     reconciled: tx.reconciled,
                     "tx-row-parent": tx.isParent,
@@ -655,8 +661,8 @@ export default function TransactionTable(props: TransactionTableProps) {
                   >
                     {isEditing("amount") ? (
                       <input
-                        type="number"
-                        step={fmt().code === "IDR" ? "1" : "0.01"}
+                        type="text"
+                        inputmode={fmt().inputMode}
                         class="tx-inline-input"
                         value={fmt().formatCentsInput(tx.amount ?? 0)}
                         onBlur={(e) => saveEdit(tx, "amount", e.currentTarget.value)}
@@ -735,8 +741,8 @@ export default function TransactionTable(props: TransactionTableProps) {
                               </For>
                             </select>
                             <input
-                              type="number"
-                              step={fmt().code === "IDR" ? "1" : "0.01"}
+                              type="text"
+                              inputmode={fmt().inputMode}
                               class="tx-inline-input"
                               style={{ width: "120px" }}
                               placeholder="Amount"

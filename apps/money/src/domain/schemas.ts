@@ -2,6 +2,7 @@ import { createSelectSchema, createInsertSchema } from "drizzle-orm/effect-schem
 import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
 import * as schema from "../db/schema";
+import { CategoryIconSchema } from "./category-icons";
 import {
   AccountIdSchema,
   TransactionIdSchema,
@@ -135,6 +136,7 @@ export type TransactionApi = Schema.Schema.Type<typeof TransactionApiSchema>;
 export const CategoryApiSchema = Schema.Struct({
   id: CategoryIdSchema,
   name: Schema.String,
+  icon: Schema.optional(Schema.NullOr(CategoryIconSchema)),
   isIncome: Schema.Boolean,
   groupId: Schema.NullOr(CategoryGroupIdSchema),
   sortOrder: Schema.Number,
@@ -427,7 +429,12 @@ export const SettingsResponseSchema = Schema.Struct({
 export const CommandResponseSchema = Schema.Union([
   Schema.Struct({
     ok: Schema.Literal(true),
-    data: Schema.Struct({ id: Schema.optional(Schema.String) }),
+    data: Schema.Struct({
+      id: Schema.optional(Schema.String),
+      added: Schema.optional(Schema.Number),
+      updated: Schema.optional(Schema.Number),
+      errors: Schema.optional(Schema.Array(Schema.String)),
+    }),
   }),
   Schema.Struct({ ok: Schema.Literal(false), error: Schema.String }),
 ]);

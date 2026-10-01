@@ -39,9 +39,9 @@ export function createTransactionsGroup(env: Env) {
             scheduleId: s.transactions.scheduleId,
             createdAt: s.transactions.createdAt,
             updatedAt: s.transactions.updatedAt,
-            categoryName: s.categories.name,
-            accountName: s.accounts.name,
-            scheduleName: s.schedules.name,
+            categoryName: sql<string | null>`${s.categories.name}`.as("category_name"),
+            accountName: sql<string | null>`${s.accounts.name}`.as("account_name"),
+            scheduleName: sql<string | null>`${s.schedules.name}`.as("schedule_name"),
           })
           .from(s.transactions)
           .leftJoin(s.categories, eq(s.transactions.categoryId, s.categories.id))

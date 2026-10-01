@@ -149,7 +149,7 @@ export interface CommandData {
   budget?: object | null;
   added?: number;
   updated?: number;
-  errors?: string[];
+  errors?: readonly string[];
   childIds?: string[];
   parentId?: string;
   targetId?: string;

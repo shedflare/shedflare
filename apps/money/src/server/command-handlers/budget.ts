@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import type { Db } from "../d1-access";
 import * as s from "../../db/schema";
 import { computeMonthBudget } from "../budget-engine";
@@ -87,27 +87,21 @@ export async function handleBudgetCommands(
         .all();
 
       const now = nowIso();
-      for (const pb of prevBudgets) {
-        const [existing] = await db
-          .select({ id: s.budgets.id })
-          .from(s.budgets)
-          .where(sql`${s.budgets.month} = ${month} AND ${s.budgets.categoryId} = ${pb.categoryId}`)
-          .all();
-        if (!existing) {
-          await db
-            .insert(s.budgets)
-            .values({
-              id: budgetId(month, pb.categoryId),
-              month,
-              categoryId: pb.categoryId,
-              amount: pb.amount,
-              carryover: pb.carryover,
-              createdAt: now,
-              updatedAt: now,
-            })
-            .run();
-        }
-      }
+      const [first, ...rest] = prevBudgets.map((pb) =>
+        db
+          .insert(s.budgets)
+          .values({
+            id: budgetId(month, pb.categoryId),
+            month,
+            categoryId: pb.categoryId,
+            amount: pb.amount,
+            carryover: pb.carryover,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoNothing({ target: s.budgets.id }),
+      );
+      if (first) await db.batch([first, ...rest]);
       const result = await computeMonthBudget(db, month);
       return { ok: true, data: { month, budget: result } };
     }
@@ -280,12 +274,27 @@ export async function handleBudgetCommands(
     case "cover_overspending":
     case "transfer_budget": {
       const p = command.payload;
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(p.month)) {
+        return { ok: false, error: "Choose a valid budget month" };
+      }
       const month = toMonthInt(p.month);
       const now = nowIso();
 
       const amount = p.amount;
-      if (amount === undefined) {
-        return { ok: false, error: "Transfer/cover amount is required" };
+      if (amount === undefined || !Number.isSafeInteger(amount) || amount <= 0) {
+        return { ok: false, error: "Move amount must be a positive whole number of cents" };
+      }
+      if (p.from === p.to) return { ok: false, error: "Choose two different categories" };
+      const categories = await db
+        .select()
+        .from(s.categories)
+        .where(inArray(s.categories.id, [p.from, p.to]))
+        .all();
+      if (
+        categories.length !== 2 ||
+        categories.some((category) => category.isIncome || category.hidden)
+      ) {
+        return { ok: false, error: "Choose two visible expense categories" };
       }
 
       const [fromRow] = await db
@@ -302,39 +311,38 @@ export async function handleBudgetCommands(
       const fromAmount = (fromRow?.amount ?? 0) - amount;
       const toAmount = (toRow?.amount ?? 0) + amount;
 
-      await db
-        .insert(s.budgets)
-        .values({
-          id: budgetId(month, p.from),
-          month,
-          categoryId: p.from,
-          amount: fromAmount,
-          carryover: fromRow?.carryover ?? false,
-          createdAt: fromRow?.createdAt ?? now,
-          updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: s.budgets.id,
-          set: { amount: fromAmount, updatedAt: now },
-        })
-        .run();
-
-      await db
-        .insert(s.budgets)
-        .values({
-          id: budgetId(month, p.to),
-          month,
-          categoryId: p.to,
-          amount: toAmount,
-          carryover: toRow?.carryover ?? false,
-          createdAt: toRow?.createdAt ?? now,
-          updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: s.budgets.id,
-          set: { amount: toAmount, updatedAt: now },
-        })
-        .run();
+      await db.batch([
+        db
+          .insert(s.budgets)
+          .values({
+            id: budgetId(month, p.from),
+            month,
+            categoryId: p.from,
+            amount: fromAmount,
+            carryover: fromRow?.carryover ?? false,
+            createdAt: fromRow?.createdAt ?? now,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: s.budgets.id,
+            set: { amount: sql`${s.budgets.amount} - ${amount}`, updatedAt: now },
+          }),
+        db
+          .insert(s.budgets)
+          .values({
+            id: budgetId(month, p.to),
+            month,
+            categoryId: p.to,
+            amount: toAmount,
+            carryover: toRow?.carryover ?? false,
+            createdAt: toRow?.createdAt ?? now,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: s.budgets.id,
+            set: { amount: sql`${s.budgets.amount} + ${amount}`, updatedAt: now },
+          }),
+      ]);
 
       const result = await computeMonthBudget(db, month);
       return { ok: true, data: { month, budget: result } };

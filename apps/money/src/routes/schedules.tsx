@@ -331,6 +331,7 @@ function ScheduleForm(props: { onClose: () => void; schedule?: Schedule; onSaved
   const [endOccurrences, setEndOccurrences] = createSignal(config().endOccurrences ?? 10);
   const [endDate, setEndDate] = createSignal(config().endDate ?? "");
   const [saving, setSaving] = createSignal(false);
+  const [saveError, setSaveError] = createSignal<string | null>(null);
   let nameInput: HTMLInputElement | undefined;
 
   onMount(() => {
@@ -346,8 +347,13 @@ function ScheduleForm(props: { onClose: () => void; schedule?: Schedule; onSaved
     e.preventDefault();
     if (!name().trim()) return;
 
+    const parsedAmount = fmt().parseInput(amount() || "0");
+    if (!Number.isSafeInteger(parsedAmount)) {
+      setSaveError("Enter a valid amount.");
+      return;
+    }
+    setSaveError(null);
     setSaving(true);
-    const parsedAmount = Math.round(parseFloat(amount() || "0") * 100);
     const rules: WritableRecurrenceConfig = { type: recurrence() };
 
     if (skipWeekend()) {
@@ -425,6 +431,8 @@ function ScheduleForm(props: { onClose: () => void; schedule?: Schedule; onSaved
     try {
       await operation;
       props.onSaved?.();
+    } catch (caught) {
+      setSaveError(caught instanceof Error ? caught.message : "Could not save schedule.");
     } finally {
       setSaving(false);
     }
@@ -451,6 +459,11 @@ function ScheduleForm(props: { onClose: () => void; schedule?: Schedule; onSaved
           </button>
         </div>
         <form onSubmit={handleSubmit}>
+          <Show when={saveError()}>
+            <p role="alert" class="inline-save-error">
+              {saveError()}
+            </p>
+          </Show>
           <div class="form-group">
             <label>Name</label>
             <input
@@ -468,9 +481,9 @@ function ScheduleForm(props: { onClose: () => void; schedule?: Schedule; onSaved
           <div class="form-group">
             <label>Amount (optional)</label>
             <input
-              type="number"
-              step="0.01"
-              placeholder="0.00"
+              type="text"
+              inputmode={fmt().inputMode}
+              placeholder={fmt().code === "IDR" ? "0" : "0.00"}
               value={amount()}
               onInput={(e) => setAmount(e.currentTarget.value)}
             />

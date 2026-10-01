@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach, vi } from "vite-plus/test";
-import { redoStack, undoStack, push, undo, redo } from "./undo-stack";
+import { redoStack, undoStack, push, undo, redo, historyBusy } from "./undo-stack";
 import * as Schema from "effect/Schema";
 
 interface MockCommandData {
@@ -34,6 +34,65 @@ function fetchBody() {
 }
 
 describe("undo-stack", () => {
+  test("connection failures preserve undo and redo for retry, including recreated transaction IDs", async () => {
+    push(
+      "Add expense",
+      { commandType: "create_transaction", payload: {} },
+      { commandType: "delete_transaction", payload: { id: "original" } },
+    );
+    const length = undoStack().length;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Connection failed");
+      }),
+    );
+    expect(await undo()).toBe(false);
+    expect(undoStack()).toHaveLength(length);
+    mockFetchOk();
+    expect(await undo()).toBe(true);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Connection failed");
+      }),
+    );
+    expect(await redo()).toBe(false);
+    expect(undoStack()).toHaveLength(length - 1);
+    mockFetchOk({ id: "recreated" });
+    expect(await redo()).toBe(true);
+    mockFetchOk();
+    expect(await undo()).toBe(true);
+    expect(fetchBody()).toEqual({
+      commandType: "delete_transaction",
+      payload: { id: "recreated" },
+    });
+  });
+
+  test("blocks overlapping history requests while the first is saving", async () => {
+    push(
+      "Move money",
+      { commandType: "transfer_budget", payload: {} },
+      { commandType: "transfer_budget", payload: {} },
+    );
+    let release: ((response: Response) => void) | undefined;
+    const fetch = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          release = resolve;
+        }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const saving = undo();
+    expect(historyBusy()).toBe(true);
+    expect(await redo()).toBe(false);
+    expect(await undo()).toBe(false);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    if (!release) throw new Error("History request was not started");
+    release(new Response(JSON.stringify({ ok: true, data: {} })));
+    expect(await saving).toBe(true);
+    expect(historyBusy()).toBe(false);
+  });
   beforeEach(() => {
     recordedRequestBody = null;
     vi.stubGlobal(

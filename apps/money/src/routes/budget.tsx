@@ -1,637 +1,672 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { useNavigate, useSearchParams } from "@solidjs/router";
-import { dispatch, requireCommandId } from "../lib/pending-ops";
+import { createMemo, createResource, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { A, useSearchParams } from "@solidjs/router";
 import { api } from "../lib/api";
-import { usePrivacyMode } from "../lib/privacy";
-import { useDateFormat } from "../lib/date-format";
+import { loadRequest, requestValue, requestError } from "../lib/request-state";
+import { dispatch, requireCommandId } from "../lib/pending-ops";
+import { emitMoneyDataChanged, listenForMoneyDataChanged } from "../lib/data-events";
 import { useCurrency } from "../lib/currency";
+import { useDateFormat } from "../lib/date-format";
+import { usePrivacyMode } from "../lib/privacy";
+import {
+  currentMonthKey,
+  shiftMonth,
+  expenseCategories,
+  monthlyTarget,
+  type BudgetCategory,
+} from "../lib/budget-view";
+import { toMonthInt } from "../domain/types";
+import MoneyIcon from "../components/MoneyIcon";
+import MoneyDialog from "../components/MoneyDialog";
+import MoveMoneyDialog from "../components/MoveMoneyDialog";
+import CategoryDrawer from "../components/CategoryDrawer";
 import { PageState } from "../components/PageState";
-import { listenForMoneyDataChanged } from "../lib/data-events";
-import type {
-  CategoriesResponse,
-  CategoryGroupsResponse,
-  MonthBudget,
-} from "../domain/schemas-client";
-import * as Schema from "effect/Schema";
+import CategoryBadge from "../components/CategoryBadge";
+import CategoryIconPicker from "../components/CategoryIconPicker";
+import type { CategoryIcon } from "../domain/category-icons";
 
-type CategoryBudgetRow = MonthBudget["categories"][number];
-type CategoryDefinition = CategoriesResponse["categories"][number];
-type CategoryGroup = CategoryGroupsResponse["groups"][number];
-type GoalType = "none" | "monthly" | "byDate" | "refill" | "periodic" | "percentage";
-const GoalTypeSchema = Schema.Literals([
-  "none",
-  "monthly",
-  "byDate",
-  "refill",
-  "periodic",
-  "percentage",
-]);
-
-type GoalConfig = {
-  type: Exclude<GoalType, "none">;
-  amount?: number;
-  targetDate?: string;
-  frequency?: string;
-  percentage?: number;
-};
-const GoalConfigSchema = Schema.Struct({
-  type: Schema.Literals(["monthly", "byDate", "refill", "periodic", "percentage"]),
-  amount: Schema.optional(Schema.Number),
-  targetDate: Schema.optional(Schema.String),
-  frequency: Schema.optional(Schema.String),
-  percentage: Schema.optional(Schema.Number),
-});
-
-interface GroupedBudget {
-  groupName: string | null;
-  categories: CategoryBudgetRow[];
-  groupBudgeted: number;
-  groupSpent: number;
-  groupLeftover: number;
-}
-
-function parseGoal(goalDef: string | null): GoalConfig | null {
-  if (!goalDef) return null;
-  try {
-    return Schema.decodeUnknownSync(GoalConfigSchema)(JSON.parse(goalDef));
-  } catch {
-    return null;
-  }
-}
+type Assignment =
+  | { state: "idle" }
+  | { state: "saving"; categoryId: string }
+  | { state: "failed"; categoryId: string; amount: number; previous: number; error: string };
 
 export default function BudgetPage() {
-  const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams<{ category?: string }>();
-  const privacy = usePrivacyMode();
-  const df = useDateFormat();
   const fmt = useCurrency();
-  const now = new Date();
-  const [monthKey, setMonthKey] = createSignal(
-    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`,
+  const df = useDateFormat();
+  const privacy = usePrivacyMode();
+  const [params, setParams] = useSearchParams<{
+    category?: string;
+    month?: string;
+    new?: string;
+  }>();
+  const month = createMemo(() =>
+    /^\d{4}-(0[1-9]|1[0-2])$/.test(params.month ?? "")
+      ? (params.month ?? currentMonthKey())
+      : currentMonthKey(),
   );
-  const [categories, setCategories] = createSignal<CategoryBudgetRow[]>([]);
-  const [categoryDefinitions, setCategoryDefinitions] = createSignal<CategoryDefinition[]>([]);
-  const [categoryGroups, setCategoryGroups] = createSignal<CategoryGroup[]>([]);
-  const [toBudget, setToBudget] = createSignal(0);
-  const [loading, setLoading] = createSignal(true);
+  const [query, setQuery] = createSignal("");
+  const [filter, setFilter] = createSignal<"all" | "overspent" | "target">("all");
+  const [moving, setMoving] = createSignal(false);
+  const [newCategory, setNewCategory] = createSignal(params.new === "1");
+  const [buffering, setBuffering] = createSignal(false);
+  const [name, setName] = createSignal("");
+  const [icon, setIcon] = createSignal<CategoryIcon | null>(null);
+  const [groupId, setGroupId] = createSignal("");
+  const [bufferAmount, setBufferAmount] = createSignal("");
+  const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
-  const [showNewCategory, setShowNewCategory] = createSignal(false);
-  const [newCategoryName, setNewCategoryName] = createSignal("");
-  const [newCategoryGroup, setNewCategoryGroup] = createSignal("");
-
-  const [editName, setEditName] = createSignal("");
-  const [editGroupId, setEditGroupId] = createSignal("");
-  const [goalType, setGoalType] = createSignal<GoalType>("none");
-  const [goalAmount, setGoalAmount] = createSignal("");
-  const [goalTargetDate, setGoalTargetDate] = createSignal("");
-  const [goalFrequency, setGoalFrequency] = createSignal("quarterly");
-  const [goalPercentage, setGoalPercentage] = createSignal("");
-  const [savingCategory, setSavingCategory] = createSignal(false);
-  let categoryNameInput: HTMLInputElement | undefined;
-
-  const selectedCategory = createMemo(() =>
-    categoryDefinitions().find((category) => category.id === searchParams.category),
-  );
-
-  createEffect(() => {
-    monthKey();
-    void loadBudget();
+  const [assignment, setAssignment] = createSignal<Assignment>({ state: "idle" });
+  const failedAssignment = createMemo(() => {
+    const value = assignment();
+    return value.state === "failed" ? value : null;
   });
-
-  onMount(() => {
-    onCleanup(listenForMoneyDataChanged(loadBudget));
-  });
-
-  createEffect(() => {
-    const category = selectedCategory();
-    if (!category) return;
-    const goal = parseGoal(category.goalDef);
-    setEditName(category.name);
-    setEditGroupId(category.groupId ?? "");
-    setGoalType(goal?.type ?? "none");
-    setGoalAmount(goal?.amount ? fmt().formatCentsInput(goal.amount) : "");
-    setGoalTargetDate(goal?.targetDate ?? "");
-    setGoalFrequency(goal?.frequency ?? "quarterly");
-    setGoalPercentage(goal?.percentage ? String(goal.percentage) : "");
-    queueMicrotask(() => categoryNameInput?.focus());
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setSearchParams({ category: undefined }, { replace: true });
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    onCleanup(() => document.removeEventListener("keydown", handleKeyDown));
-  });
-
-  async function loadBudget(): Promise<void> {
-    setLoading(true);
-    setError(null);
-    try {
-      const [year, month] = monthKey().split("-").map(Number);
-      const [budgetData, categoryData, groupData] = await Promise.all([
-        api.budgetMonth(year * 100 + month),
+  const [dataResult, { refetch }] = createResource(month, (key) =>
+    loadRequest(async () => {
+      const [budget, categories, groups] = await Promise.all([
+        api.budgetMonth(toMonthInt(key)),
         api.categories(),
         api.categoryGroups(),
       ]);
-      setCategories([...budgetData.categories]);
-      setToBudget(budgetData.toBudget);
-      setCategoryDefinitions([...categoryData.categories]);
-      setCategoryGroups([...groupData.groups]);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Failed to load budget");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const grouped = createMemo((): GroupedBudget[] => {
-    const groups = new Map<string | null, CategoryBudgetRow[]>();
-    for (const category of categories()) {
-      const group = category.groupName ?? "Uncategorized";
-      groups.set(group, [...(groups.get(group) ?? []), category]);
-    }
-    return Array.from(groups.entries()).map(([groupName, rows]) => ({
-      groupName,
-      categories: rows,
-      groupBudgeted: rows.reduce((sum, category) => sum + category.budgeted, 0),
-      groupSpent: rows.reduce((sum, category) => sum + category.spent, 0),
-      groupLeftover: rows.reduce((sum, category) => sum + category.leftover, 0),
-    }));
-  });
-
-  function moveMonth(offset: number): void {
-    const [year, month] = monthKey().split("-").map(Number);
-    const next = new Date(year, month - 1 + offset, 1);
-    setMonthKey(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`);
-  }
-
-  async function setBudget(categoryId: string, rawAmount: string): Promise<void> {
-    const amount = fmt().parseInput(rawAmount);
-    const [year, month] = monthKey().split("-").map(Number);
-    const monthInt = year * 100 + month;
-    const previous =
-      categories().find((category) => category.categoryId === categoryId)?.budgeted ?? 0;
-    setCategories((current) =>
-      current.map((category) =>
-        category.categoryId === categoryId ? { ...category, budgeted: amount } : category,
-      ),
+      return { budget, definitions: categories.categories, groups: groups.groups };
+    }),
+  );
+  const data = () => requestValue(dataResult());
+  onMount(() =>
+    onCleanup(
+      listenForMoneyDataChanged(() => {
+        void refetch();
+      }),
+    ),
+  );
+  const categories = createMemo(() =>
+    expenseCategories(data()?.budget.categories ?? [], data()?.definitions ?? []),
+  );
+  const selected = createMemo(() =>
+    categories().find((category) => category.categoryId === params.category),
+  );
+  const targetFor = (category: BudgetCategory) =>
+    monthlyTarget(
+      data()?.definitions.find((definition) => definition.id === category.categoryId)?.goalDef,
     );
+  const underTarget = createMemo(() =>
+    categories().filter((category) => {
+      const target = targetFor(category);
+      return target !== null && category.budgeted < target;
+    }),
+  );
+  const overspent = createMemo(() => categories().filter((category) => category.leftover < 0));
+  const visible = createMemo(() =>
+    categories().filter(
+      (category) =>
+        category.categoryName.toLocaleLowerCase().includes(query().trim().toLocaleLowerCase()) &&
+        (filter() === "all" ||
+          (filter() === "overspent"
+            ? category.leftover < 0
+            : (targetFor(category) ?? 0) > category.budgeted)),
+    ),
+  );
+  const grouped = createMemo(() =>
+    [...new Set(visible().map((category) => category.groupName ?? "Other"))].map((name) => ({
+      name,
+      rows: visible().filter((category) => (category.groupName ?? "Other") === name),
+    })),
+  );
+  const totalAssigned = createMemo(() =>
+    categories().reduce((sum, category) => sum + category.budgeted, 0),
+  );
+  const totalSpent = createMemo(() =>
+    categories().reduce((sum, category) => sum + Math.max(0, -category.spent), 0),
+  );
+  const totalAvailable = createMemo(() =>
+    categories().reduce((sum, category) => sum + category.leftover, 0),
+  );
+  function moveMonth(offset: number) {
+    if (busy() || assignment().state === "saving") return;
+    const next = shiftMonth(month(), offset);
+    setAssignment({ state: "idle" });
+    setError(null);
+    setParams({ month: next, category: undefined });
+  }
+  async function assign(categoryId: string, amount: number, previous: number) {
+    if (amount === previous || assignment().state === "saving") return;
+    if (!Number.isSafeInteger(amount)) {
+      setError("Enter a valid amount.");
+      return;
+    }
+    setError(null);
+    const key = month();
+    setAssignment({ state: "saving", categoryId });
     try {
       await dispatch(
         "set_budget_amount",
-        { month: monthInt, categoryId, amount },
+        { month: toMonthInt(key), categoryId, amount },
         {
           undoInfo: {
-            label: "Update budget",
+            label: "Assign money",
             inverse: {
               commandType: "set_budget_amount",
-              payload: { month: monthInt, categoryId, amount: previous },
+              payload: { month: toMonthInt(key), categoryId, amount: previous },
             },
           },
         },
       ).promise;
+      setAssignment({ state: "idle" });
+      emitMoneyDataChanged();
+    } catch (caught) {
+      setAssignment({
+        state: "failed",
+        categoryId,
+        amount,
+        previous,
+        error: caught instanceof Error ? caught.message : "Could not save",
+      });
+    }
+  }
+  async function copyPrevious() {
+    setBusy(true);
+    setError(null);
+    try {
+      await dispatch("copy_previous_month", { month: month() }).promise;
+      emitMoneyDataChanged();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not copy last month");
     } finally {
-      await loadBudget();
+      setBusy(false);
     }
   }
-
-  function buildGoalDefinition(): string | null {
-    const type = goalType();
-    if (type === "none") return null;
-    if (type === "percentage") {
-      const percentage = Number(goalPercentage());
-      return percentage > 0 ? JSON.stringify({ type, percentage }) : null;
-    }
-    const amount = fmt().parseInput(goalAmount());
-    if (amount <= 0) return null;
-    const goal: GoalConfig = { type, amount };
-    if ((type === "byDate" || type === "refill") && goalTargetDate()) {
-      goal.targetDate = goalTargetDate();
-    }
-    if (type === "periodic") goal.frequency = goalFrequency();
-    return JSON.stringify(goal);
-  }
-
-  async function saveCategory(event: Event): Promise<void> {
+  async function createCategory(event: SubmitEvent) {
     event.preventDefault();
-    const category = selectedCategory();
-    const name = editName().trim();
-    if (!category || !name) return;
-    const nextGoal = buildGoalDefinition();
-    setSavingCategory(true);
+    setBusy(true);
+    setError(null);
     try {
       await dispatch(
-        "update_category",
-        {
-          id: category.id,
-          name,
-          groupId: editGroupId() || null,
-          goalDef: nextGoal,
-        },
+        "create_category",
+        { name: name().trim(), groupId: groupId() || null, icon: icon() },
         {
           undoInfo: {
-            label: "Update category",
-            inverse: {
-              commandType: "update_category",
-              payload: {
-                id: category.id,
-                name: category.name,
-                groupId: category.groupId,
-                goalDef: category.goalDef,
-              },
-            },
+            label: "Create category",
+            inverse: (result) => ({
+              commandType: "delete_category",
+              payload: { id: requireCommandId(result) },
+            }),
           },
         },
       ).promise;
-      await loadBudget();
-      setSearchParams({ category: undefined }, { replace: true });
+      setNewCategory(false);
+      setParams({ new: undefined });
+      setName("");
+      setIcon(null);
+      emitMoneyDataChanged();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not create category");
     } finally {
-      setSavingCategory(false);
+      setBusy(false);
     }
   }
-
-  async function createCategory(event: Event): Promise<void> {
+  async function saveBuffer(event: SubmitEvent) {
     event.preventDefault();
-    const name = newCategoryName().trim();
-    if (!name) return;
-    await dispatch(
-      "create_category",
-      { name, groupId: newCategoryGroup() || null },
-      {
-        undoInfo: {
-          label: "Create category",
-          inverse: (data) => ({
-            commandType: "delete_category",
-            payload: { id: requireCommandId(data) },
-          }),
+    const amount = fmt().parseInput(bufferAmount());
+    if (!Number.isSafeInteger(amount) || amount < 0) {
+      setError("Enter a positive amount or zero.");
+      return;
+    }
+    const previous = data()?.budget.buffered ?? 0;
+    if (amount - previous > Math.max(0, data()?.budget.toBudget ?? 0)) {
+      setError("That’s more than you have left to assign.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await dispatch(
+        "set_buffer",
+        { month: month(), amount },
+        {
+          undoInfo: {
+            label: "Hold for next month",
+            inverse: { commandType: "set_buffer", payload: { month: month(), amount: previous } },
+          },
         },
-      },
-    ).promise;
-    setNewCategoryName("");
-    setNewCategoryGroup("");
-    setShowNewCategory(false);
-    await loadBudget();
+      ).promise;
+      setBuffering(false);
+      emitMoneyDataChanged();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not hold money");
+    } finally {
+      setBusy(false);
+    }
   }
-
   return (
-    <div class="page budget-page">
-      <div class="page-header budget-page-header">
-        <div>
-          <h1 class="page-title">Budget</h1>
-          <p class="page-subtitle page-subtitle-compact">
-            Plan, rename categories, and set goals in one place.
-          </p>
-        </div>
-        <div class="budget-header-actions">
+    <div class="page planning-page">
+      <div class="page-header">
+        <h1 class="page-title">Budget</h1>
+        <div class="page-actions">
           <button
-            type="button"
-            class="btn btn-secondary btn-sm"
-            onClick={() => setShowNewCategory(true)}
+            class="btn btn-secondary"
+            onClick={() => setMoving(true)}
+            disabled={!categories().length || dataResult.loading || busy()}
           >
-            + Category
+            <MoneyIcon name="move" />
+            Move money
           </button>
           <button
-            type="button"
-            class="btn btn-ghost btn-sm"
-            onClick={() => navigate("/categories")}
+            class="btn btn-primary"
+            onClick={() => {
+              setError(null);
+              setNewCategory(true);
+            }}
+            disabled={dataResult.loading}
           >
-            Advanced setup
+            <MoneyIcon name="plus" />
+            Category
           </button>
         </div>
       </div>
-
-      <div class="budget-toolbar">
+      <div class="planning-month">
         <div class="month-nav">
           <button
-            type="button"
             class="btn btn-icon btn-ghost"
-            onClick={() => moveMonth(-1)}
             aria-label="Previous month"
+            onClick={() => moveMonth(-1)}
+            disabled={busy() || assignment().state === "saving"}
           >
-            ←
+            ‹
           </button>
-          <span class="month-label">{df().formatMonth(monthKey())}</span>
+          <h2>{df().formatMonth(month())}</h2>
           <button
-            type="button"
             class="btn btn-icon btn-ghost"
-            onClick={() => moveMonth(1)}
             aria-label="Next month"
+            onClick={() => moveMonth(1)}
+            disabled={busy() || assignment().state === "saving"}
           >
-            →
+            ›
           </button>
         </div>
-        <div class="budget-ready">
-          <span>Ready to budget</span>
-          <strong
-            class={privacy().blurClass()}
-            classList={{ positive: toBudget() >= 0, negative: toBudget() < 0 }}
+        <Show when={month() !== currentMonthKey()}>
+          <button
+            class="text-button"
+            onClick={() => {
+              setParams({ month: undefined, category: undefined });
+            }}
+            disabled={busy() || assignment().state === "saving"}
           >
-            {fmt().formatCents(toBudget())}
-          </strong>
-        </div>
+            This month
+          </button>
+        </Show>
       </div>
-
       <PageState
-        loading={loading()}
-        error={error()}
-        onRetry={loadBudget}
-        loadingMessage="Loading budget…"
+        loading={dataResult.loading}
+        error={requestError(dataResult()) ? "This month’s budget couldn’t be loaded." : null}
+        onRetry={() => {
+          void refetch();
+        }}
       >
-        <Show
-          when={grouped().length > 0}
-          fallback={
-            <div class="empty-state">
-              <p>No categories yet.</p>
+        <div class="plan-summary">
+          <div
+            class="plan-to-assign"
+            classList={{ "is-negative": (data()?.budget.toBudget ?? 0) < 0 }}
+          >
+            <span class="metric-label">
+              {(data()?.budget.toBudget ?? 0) < 0 ? "Overassigned" : "To assign"}
+            </span>
+            <strong class={privacy().blurClass()}>
+              {fmt().formatCents(Math.abs(data()?.budget.toBudget ?? 0))}
+            </strong>
+            <Show when={(data()?.budget.toBudget ?? 0) === 0}>
+              <span class="assigned-check">
+                <MoneyIcon name="check" size={15} />
+                All assigned
+              </span>
+            </Show>
+          </div>
+          <div>
+            <span class="metric-label">Assigned</span>
+            <strong class={privacy().blurClass()}>{fmt().formatCents(totalAssigned())}</strong>
+          </div>
+          <div>
+            <span class="metric-label">Spent</span>
+            <strong class={privacy().blurClass()}>{fmt().formatCents(totalSpent())}</strong>
+          </div>
+          <div>
+            <span class="metric-label">Available</span>
+            <strong class={privacy().blurClass()}>{fmt().formatCents(totalAvailable())}</strong>
+          </div>
+        </div>
+        <div class="plan-tools">
+          <div class="filter-chips">
+            <button classList={{ active: filter() === "all" }} onClick={() => setFilter("all")}>
+              All
+            </button>
+            <button
+              classList={{ active: filter() === "overspent" }}
+              onClick={() => setFilter("overspent")}
+            >
+              Overspent <span>{overspent().length}</span>
+            </button>
+            <button
+              classList={{ active: filter() === "target" }}
+              onClick={() => setFilter("target")}
+            >
+              Under target <span>{underTarget().length}</span>
+            </button>
+          </div>
+          <div class="plan-tool-actions">
+            <label class="compact-search">
+              <MoneyIcon name="search" size={17} />
+              <input
+                aria-label="Find a budget category"
+                type="search"
+                placeholder="Find category"
+                value={query()}
+                onInput={(event) => setQuery(event.currentTarget.value)}
+              />
+            </label>
+            <details class="entity-menu">
+              <summary aria-label="Budget actions">
+                <MoneyIcon name="more" />
+              </summary>
+              <div class="entity-menu-popover">
+                <button
+                  onClick={() => {
+                    void copyPrevious();
+                  }}
+                  disabled={busy()}
+                >
+                  Fill from last month
+                </button>
+                <button
+                  onClick={() => {
+                    setError(null);
+                    setBufferAmount(fmt().formatCentsInput(data()?.budget.buffered ?? 0));
+                    setBuffering(true);
+                  }}
+                >
+                  Hold for next month
+                </button>
+                <A href="/categories">Organize categories</A>
+              </div>
+            </details>
+          </div>
+        </div>
+        <Show when={error() && !newCategory() && !buffering()}>
+          <p class="form-error" role="alert">
+            {error()}
+          </p>
+        </Show>
+        <Show when={failedAssignment()}>
+          {(failed) => (
+            <div class="assignment-error" role="alert">
+              <span>{failed().error}</span>
               <button
-                type="button"
-                class="btn btn-primary"
-                onClick={() => setShowNewCategory(true)}
+                class="btn btn-secondary btn-sm"
+                onClick={() => assign(failed().categoryId, failed().amount, failed().previous)}
               >
-                Create your first category
+                Retry
+              </button>
+            </div>
+          )}
+        </Show>
+        <Show
+          when={categories().length}
+          fallback={
+            <div class="first-step">
+              <MoneyIcon name="budget" size={36} />
+              <h2>Start with a category.</h2>
+              <button class="btn btn-primary" onClick={() => setNewCategory(true)}>
+                <MoneyIcon name="plus" />
+                Add category
               </button>
             </div>
           }
         >
-          <div class="budget-table">
-            <div class="budget-table-header" aria-hidden="true">
-              <span class="col-category">Category</span>
-              <span class="col-budgeted">Budgeted</span>
-              <span class="col-spent">Spent</span>
-              <span class="col-leftover">Leftover</span>
-            </div>
-            <For each={grouped()}>
-              {(group) => (
-                <div class="budget-group">
-                  <div class="budget-group-title">{group.groupName}</div>
-                  <For each={group.categories}>
-                    {(category) => (
-                      <div class="budget-row">
-                        <span class="col-category">
+          <Show
+            when={visible().length}
+            fallback={
+              <p class="quiet-empty">
+                {filter() === "overspent"
+                  ? "No overspending"
+                  : filter() === "target"
+                    ? "No targets need funding"
+                    : "No matching categories"}
+              </p>
+            }
+          >
+            <div class="plan-table">
+              <div class="plan-table-header">
+                <span>Category</span>
+                <span>Assigned</span>
+                <span>Spent</span>
+                <span>Available</span>
+              </div>
+              <For each={grouped()}>
+                {(group) => (
+                  <section class="plan-group">
+                    <div class="plan-group-heading">
+                      <h3>{group.name}</h3>
+                      <strong class={privacy().blurClass()}>
+                        {fmt().formatCents(
+                          group.rows.reduce((sum, category) => sum + category.leftover, 0),
+                        )}
+                      </strong>
+                    </div>
+                    <For each={group.rows}>
+                      {(category) => (
+                        <div class="plan-row">
                           <button
-                            type="button"
-                            class="budget-category-button"
-                            onClick={() =>
-                              setSearchParams({ category: category.categoryId }, { replace: true })
-                            }
-                            aria-label={`Edit ${category.categoryName}`}
+                            class="plan-category"
+                            onClick={() => setParams({ category: category.categoryId })}
                           >
-                            {category.categoryName}
-                            <span aria-hidden="true">•••</span>
+                            <span class="plan-category-label">
+                              <CategoryBadge
+                                name={category.categoryName}
+                                icon={
+                                  data()?.definitions.find(
+                                    (definition) => definition.id === category.categoryId,
+                                  )?.icon
+                                }
+                                small
+                              />
+                              <span>{category.categoryName}</span>
+                            </span>
+                            <Show when={targetFor(category)}>
+                              {(target) => (
+                                <span class="target-line">
+                                  <span class="target-track">
+                                    <span
+                                      style={{
+                                        width: `${Math.min(100, Math.max(0, (category.budgeted / target()) * 100))}%`,
+                                      }}
+                                    />
+                                  </span>
+                                  <Show
+                                    when={category.budgeted < target()}
+                                    fallback={<MoneyIcon name="check" size={12} />}
+                                  >
+                                    <small class={privacy().blurClass()}>
+                                      {fmt().formatCents(Math.max(0, target() - category.budgeted))}{" "}
+                                      to target
+                                    </small>
+                                  </Show>
+                                </span>
+                              )}
+                            </Show>
                           </button>
-                        </span>
-                        <span class={`col-budgeted ${privacy().blurClass()}`} data-label="Budgeted">
-                          <input
-                            type="number"
-                            value={fmt().formatCentsInput(category.budgeted)}
-                            step={fmt().code === "IDR" ? "1" : "0.01"}
-                            class={`budget-input ${privacy().blurClass()}`}
-                            aria-label={`Budgeted amount for ${category.categoryName}`}
-                            onBlur={(event) =>
-                              void setBudget(category.categoryId, event.currentTarget.value)
-                            }
-                          />
-                        </span>
-                        <span class={`col-spent ${privacy().blurClass()}`} data-label="Spent">
-                          {fmt().formatCents(category.spent)}
-                        </span>
-                        <span
-                          class={`col-leftover ${privacy().blurClass()}`}
-                          classList={{
-                            positive: category.leftover >= 0,
-                            negative: category.leftover < 0,
-                          }}
-                          data-label="Leftover"
-                        >
-                          {fmt().formatCents(category.leftover)}
-                        </span>
-                      </div>
-                    )}
-                  </For>
-                  <div class="budget-row budget-group-total">
-                    <span class="col-category">
-                      <strong>Group total</strong>
-                    </span>
-                    <span class={`col-budgeted ${privacy().blurClass()}`} data-label="Budgeted">
-                      <strong>{fmt().formatCents(group.groupBudgeted)}</strong>
-                    </span>
-                    <span class={`col-spent ${privacy().blurClass()}`} data-label="Spent">
-                      <strong>{fmt().formatCents(group.groupSpent)}</strong>
-                    </span>
-                    <span class={`col-leftover ${privacy().blurClass()}`} data-label="Leftover">
-                      <strong>{fmt().formatCents(group.groupLeftover)}</strong>
-                    </span>
-                  </div>
-                </div>
-              )}
-            </For>
-          </div>
+                          <label class="plan-assigned">
+                            <span class="mobile-column-label">Assigned</span>
+                            <input
+                              aria-label={`Assigned to ${category.categoryName}`}
+                              type="text"
+                              inputmode={fmt().inputMode}
+                              class={privacy().blurClass()}
+                              value={fmt().formatCentsInput(category.budgeted)}
+                              disabled={assignment().state === "saving" || busy()}
+                              onBlur={(event) => {
+                                void assign(
+                                  category.categoryId,
+                                  fmt().parseInput(event.currentTarget.value),
+                                  category.budgeted,
+                                );
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") event.currentTarget.blur();
+                              }}
+                            />
+                          </label>
+                          <span class={`plan-spent ${privacy().blurClass()}`}>
+                            <span class="mobile-column-label">Spent</span>
+                            {fmt().formatCents(Math.max(0, -category.spent))}
+                          </span>
+                          <button
+                            class={`plan-available ${privacy().blurClass()}`}
+                            classList={{
+                              "is-overspent": category.leftover < 0,
+                              "is-empty": category.leftover === 0,
+                            }}
+                            aria-label={`${category.categoryName} available: ${fmt().formatCents(category.leftover)}`}
+                            onClick={() => setParams({ category: category.categoryId })}
+                          >
+                            <span class="mobile-column-label">Available</span>
+                            {fmt().formatCents(category.leftover)}
+                          </button>
+                        </div>
+                      )}
+                    </For>
+                  </section>
+                )}
+              </For>
+              <div class="plan-table-total">
+                <strong>Total</strong>
+                <strong class={privacy().blurClass()}>
+                  {fmt().formatCents(
+                    visible().reduce((sum, category) => sum + category.budgeted, 0),
+                  )}
+                </strong>
+                <strong class={privacy().blurClass()}>
+                  {fmt().formatCents(
+                    visible().reduce((sum, category) => sum + Math.max(0, -category.spent), 0),
+                  )}
+                </strong>
+                <strong class={privacy().blurClass()}>
+                  {fmt().formatCents(
+                    visible().reduce((sum, category) => sum + category.leftover, 0),
+                  )}
+                </strong>
+              </div>
+            </div>
+          </Show>
+        </Show>
+        <Show when={(data()?.budget.buffered ?? 0) > 0}>
+          <button
+            class="held-money"
+            onClick={() => {
+              setError(null);
+              setBufferAmount(fmt().formatCentsInput(data()?.budget.buffered ?? 0));
+              setBuffering(true);
+            }}
+          >
+            <MoneyIcon name="calendar" />
+            <span>Held for next month</span>
+            <strong class={privacy().blurClass()}>
+              {fmt().formatCents(data()?.budget.buffered ?? 0)}
+            </strong>
+            <MoneyIcon name="arrow" size={16} />
+          </button>
         </Show>
       </PageState>
-
-      <Show when={selectedCategory()}>
+      <Show when={selected()} keyed>
         {(category) => (
-          <div
-            class="drawer-overlay"
-            onClick={() => setSearchParams({ category: undefined }, { replace: true })}
-          >
-            <aside
-              class="context-drawer"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="category-editor-title"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div class="drawer-header">
-                <div>
-                  <p class="eyebrow">Budget category</p>
-                  <h2 id="category-editor-title">Edit category</h2>
-                </div>
-                <button
-                  type="button"
-                  class="btn btn-icon btn-ghost"
-                  aria-label="Close category editor"
-                  onClick={() => setSearchParams({ category: undefined }, { replace: true })}
-                >
-                  ×
-                </button>
-              </div>
-              <form onSubmit={saveCategory} class="drawer-form">
-                <div class="form-group">
-                  <label for="category-name">Name</label>
-                  <input
-                    id="category-name"
-                    ref={(element) => {
-                      categoryNameInput = element;
-                    }}
-                    value={editName()}
-                    onInput={(event) => setEditName(event.currentTarget.value)}
-                    autofocus
-                    required
-                  />
-                </div>
-                <div class="form-group">
-                  <label for="category-group">Group</label>
-                  <select
-                    id="category-group"
-                    value={editGroupId()}
-                    onChange={(event) => setEditGroupId(event.currentTarget.value)}
-                  >
-                    <option value="">Uncategorized</option>
-                    <For each={categoryGroups().filter((group) => !group.hidden)}>
-                      {(group) => <option value={group.id}>{group.name}</option>}
-                    </For>
-                  </select>
-                </div>
-                <div class="drawer-divider" />
-                <div class="form-group">
-                  <label for="goal-type">Goal</label>
-                  <select
-                    id="goal-type"
-                    value={goalType()}
-                    onChange={(event) =>
-                      setGoalType(
-                        Schema.decodeUnknownSync(GoalTypeSchema)(event.currentTarget.value),
-                      )
-                    }
-                  >
-                    <option value="none">No goal</option>
-                    <option value="monthly">Monthly amount</option>
-                    <option value="byDate">Save up by date</option>
-                    <option value="refill">Refill target</option>
-                    <option value="periodic">Periodic allocation</option>
-                    <option value="percentage">Percentage of income</option>
-                  </select>
-                </div>
-                <Show when={goalType() !== "none" && goalType() !== "percentage"}>
-                  <div class="form-group">
-                    <label for="goal-amount">Target amount</label>
-                    <input
-                      id="goal-amount"
-                      type="number"
-                      min="0"
-                      step={fmt().code === "IDR" ? "1" : "0.01"}
-                      value={goalAmount()}
-                      onInput={(event) => setGoalAmount(event.currentTarget.value)}
-                    />
-                  </div>
-                </Show>
-                <Show when={goalType() === "percentage"}>
-                  <div class="form-group">
-                    <label for="goal-percentage">Percent of income</label>
-                    <input
-                      id="goal-percentage"
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.1"
-                      value={goalPercentage()}
-                      onInput={(event) => setGoalPercentage(event.currentTarget.value)}
-                    />
-                  </div>
-                </Show>
-                <Show when={goalType() === "byDate" || goalType() === "refill"}>
-                  <div class="form-group">
-                    <label for="goal-date">Target month</label>
-                    <input
-                      id="goal-date"
-                      type="month"
-                      value={goalTargetDate()}
-                      onInput={(event) => setGoalTargetDate(event.currentTarget.value)}
-                    />
-                  </div>
-                </Show>
-                <Show when={goalType() === "periodic"}>
-                  <div class="form-group">
-                    <label for="goal-frequency">Frequency</label>
-                    <select
-                      id="goal-frequency"
-                      value={goalFrequency()}
-                      onChange={(event) => setGoalFrequency(event.currentTarget.value)}
-                    >
-                      <option value="quarterly">Every 3 months</option>
-                      <option value="biannual">Every 6 months</option>
-                      <option value="yearly">Every 12 months</option>
-                    </select>
-                  </div>
-                </Show>
-                <div class="drawer-actions">
-                  <button
-                    type="button"
-                    class="btn btn-ghost"
-                    onClick={() => setSearchParams({ category: undefined }, { replace: true })}
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" class="btn btn-primary" disabled={savingCategory()}>
-                    {savingCategory() ? "Saving…" : `Save ${category().name}`}
-                  </button>
-                </div>
-              </form>
-            </aside>
-          </div>
+          <CategoryDrawer
+            month={month()}
+            category={category}
+            definition={data()?.definitions.find(
+              (definition) => definition.id === category.categoryId,
+            )}
+            categories={categories()}
+            onClose={() => setParams({ category: undefined })}
+          />
         )}
       </Show>
-
-      <Show when={showNewCategory()}>
-        <div class="modal-overlay" onClick={() => setShowNewCategory(false)}>
-          <div
-            class="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="new-category-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div class="modal-header">
-              <h2 id="new-category-title">New category</h2>
-              <button
-                type="button"
-                class="modal-close"
-                onClick={() => setShowNewCategory(false)}
-                aria-label="Close"
-              >
-                ×
-              </button>
+      <Show when={moving()}>
+        <MoveMoneyDialog
+          month={month()}
+          categories={categories()}
+          onClose={() => setMoving(false)}
+        />
+      </Show>
+      <Show when={newCategory()}>
+        <MoneyDialog
+          title="New category"
+          onClose={() => {
+            setNewCategory(false);
+            setParams({ new: undefined });
+          }}
+          busy={busy()}
+        >
+          <form class="money-form" onSubmit={createCategory}>
+            <CategoryIconPicker name={name()} value={icon()} onChange={setIcon} disabled={busy()} />
+            <div class="form-group">
+              <label for="new-category-name">Name</label>
+              <input
+                id="new-category-name"
+                autofocus
+                required
+                value={name()}
+                onInput={(event) => setName(event.currentTarget.value)}
+                disabled={busy()}
+              />
             </div>
-            <form onSubmit={createCategory}>
-              <div class="form-group">
-                <label for="new-category-name">Name</label>
-                <input
-                  id="new-category-name"
-                  value={newCategoryName()}
-                  onInput={(event) => setNewCategoryName(event.currentTarget.value)}
-                  required
-                  autofocus
-                />
-              </div>
-              <div class="form-group">
-                <label for="new-category-group">Group</label>
-                <select
-                  id="new-category-group"
-                  value={newCategoryGroup()}
-                  onChange={(event) => setNewCategoryGroup(event.currentTarget.value)}
+            <div class="form-group">
+              <label for="new-category-group">Group</label>
+              <select
+                id="new-category-group"
+                value={groupId()}
+                onChange={(event) => setGroupId(event.currentTarget.value)}
+                disabled={busy()}
+              >
+                <option value="">Other</option>
+                <For
+                  each={(data()?.groups ?? []).filter((group) => !group.hidden && !group.isIncome)}
                 >
-                  <option value="">Uncategorized</option>
-                  <For each={categoryGroups().filter((group) => !group.hidden)}>
-                    {(group) => <option value={group.id}>{group.name}</option>}
-                  </For>
-                </select>
-              </div>
-              <div class="form-actions">
-                <button
-                  type="button"
-                  class="btn btn-ghost"
-                  onClick={() => setShowNewCategory(false)}
-                >
-                  Cancel
-                </button>
-                <button type="submit" class="btn btn-primary">
-                  Create category
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+                  {(group) => <option value={group.id}>{group.name}</option>}
+                </For>
+              </select>
+            </div>
+            <Show when={error()}>
+              <p class="form-error" role="alert">
+                {error()}
+              </p>
+            </Show>
+            <button type="submit" class="btn btn-primary btn-full" disabled={busy()}>
+              {busy() ? "Creating…" : "Add category"}
+            </button>
+          </form>
+        </MoneyDialog>
+      </Show>
+      <Show when={buffering()}>
+        <MoneyDialog title="Hold for next month" onClose={() => setBuffering(false)} busy={busy()}>
+          <form class="money-form" onSubmit={saveBuffer}>
+            <div class="form-group">
+              <label for="hold-amount">Amount held</label>
+              <input
+                id="hold-amount"
+                autofocus
+                type="text"
+                inputmode={fmt().inputMode}
+                required
+                value={bufferAmount()}
+                onInput={(event) => setBufferAmount(event.currentTarget.value)}
+                disabled={busy()}
+              />
+            </div>
+            <Show when={error()}>
+              <p class="form-error" role="alert">
+                {error()}
+              </p>
+            </Show>
+            <button type="submit" class="btn btn-primary btn-full" disabled={busy()}>
+              {busy() ? "Saving…" : "Save"}
+            </button>
+          </form>
+        </MoneyDialog>
       </Show>
     </div>
   );

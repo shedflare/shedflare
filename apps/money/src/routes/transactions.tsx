@@ -4,6 +4,7 @@ import TransactionFilters from "../components/TransactionFilters";
 import TransactionTable from "../components/TransactionTable";
 import { PageState } from "../components/PageState";
 import { useMoneyShell } from "../components/MoneyShellContext";
+import MoneyIcon from "../components/MoneyIcon";
 import { dispatch, requireCommandId } from "../lib/pending-ops";
 import { api } from "../lib/api";
 import { listenForMoneyDataChanged } from "../lib/data-events";
@@ -46,7 +47,13 @@ function toTransactionRow(tx: ApiTransactionRow): TransactionRow {
 
 export default function AllTransactionsPage() {
   const shell = useMoneyShell();
-  const [searchParams, setSearchParams] = useSearchParams<{ q?: string; view?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams<{
+    q?: string;
+    view?: string;
+    category?: string;
+    month?: string;
+    focus?: string;
+  }>();
   const [transactions, setTransactions] = createSignal<TransactionRow[]>([]);
   const [categories, setCategories] = createSignal<CategoryRow[]>([]);
   const [tagList, setTagList] = createSignal<TagRow[]>([]);
@@ -73,10 +80,23 @@ export default function AllTransactionsPage() {
 
   const visibleTransactions = createMemo(() => {
     const query = searchQuery().trim().toLocaleLowerCase();
-    const base =
-      searchParams.view === "uncategorized"
-        ? transactions().filter((transaction) => transaction.categoryId === null)
-        : transactions();
+    const base = transactions().filter((transaction) => {
+      if (searchParams.focus && transaction.id !== searchParams.focus) return false;
+      if (searchParams.category && transaction.categoryId !== searchParams.category) return false;
+      if (
+        /^\d{4}-(0[1-9]|1[0-2])$/.test(searchParams.month ?? "") &&
+        transaction.date.slice(0, 7) !== searchParams.month
+      )
+        return false;
+      if (
+        searchParams.view === "uncategorized" &&
+        (transaction.categoryId !== null || transaction.isParent)
+      )
+        return false;
+      if (searchParams.view === "expenses" && transaction.amount >= 0) return false;
+      if (searchParams.view === "income" && transaction.amount <= 0) return false;
+      return true;
+    });
     if (!query) return base;
     const names = accountNames();
     return base.filter((transaction) =>
@@ -221,24 +241,22 @@ export default function AllTransactionsPage() {
     <div class="page">
       <div class="page-header">
         <div>
-          <h1 class="page-title">Transactions</h1>
-          <p class="page-subtitle page-subtitle-compact">
-            Search and edit activity across every account.
-          </p>
+          <h1 class="page-title">Activity</h1>
         </div>
         <div class="page-actions">
           <button class="btn btn-primary btn-sm" onClick={() => shell.openTransaction()}>
-            + Add Transaction
+            <MoneyIcon name="plus" />
+            Add
           </button>
         </div>
       </div>
 
       <div class="transaction-search">
-        <span aria-hidden="true">⌕</span>
+        <MoneyIcon name="search" size={18} />
         <input
           type="search"
           aria-label="Search transactions"
-          placeholder="Search payee, notes, category, or account…"
+          placeholder="Search activity"
           value={searchQuery()}
           onInput={(event) => {
             const query = event.currentTarget.value;
@@ -260,24 +278,77 @@ export default function AllTransactionsPage() {
         </Show>
       </div>
 
-      <Show when={searchParams.view === "uncategorized"}>
+      <div class="activity-controls">
+        <div class="filter-chips" aria-label="Activity views">
+          <button
+            classList={{ active: !searchParams.view }}
+            onClick={() => setSearchParams({ view: undefined })}
+          >
+            All
+          </button>
+          <button
+            classList={{ active: searchParams.view === "expenses" }}
+            onClick={() => setSearchParams({ view: "expenses" })}
+          >
+            Expenses
+          </button>
+          <button
+            classList={{ active: searchParams.view === "income" }}
+            onClick={() => setSearchParams({ view: "income" })}
+          >
+            Income
+          </button>
+          <button
+            classList={{ active: searchParams.view === "uncategorized" }}
+            onClick={() => setSearchParams({ view: "uncategorized" })}
+          >
+            Uncategorized
+          </button>
+        </div>
+        <span class="text-muted">
+          {visibleTransactions().filter((transaction) => !transaction.isChild).length} transactions
+        </span>
+      </div>
+
+      <Show when={searchParams.category || searchParams.month || searchParams.focus}>
         <div class="active-view-chip">
-          Uncategorized only
+          {searchParams.focus
+            ? "Selected transaction"
+            : [
+                categories().find((category) => category.id === searchParams.category)?.name,
+                searchParams.month,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
           <button
             type="button"
             aria-label="Show all transactions"
-            onClick={() => setSearchParams({ view: undefined }, { replace: true })}
+            onClick={() =>
+              setSearchParams(
+                { category: undefined, month: undefined, focus: undefined },
+                { replace: true },
+              )
+            }
           >
             ×
           </button>
         </div>
       </Show>
 
-      <TransactionFilters
-        activeConditions={filterConditions()}
-        activeConditionsOp={filterConditionsOp()}
-        onConditionsChange={handleFilterChange}
-      />
+      <details class="activity-advanced">
+        <summary>
+          <MoneyIcon name="settings" size={16} />
+          Filters
+          <Show when={filterConditions().length}>
+            <span>({filterConditions().length})</span>
+          </Show>
+        </summary>
+        <TransactionFilters
+          activeConditions={filterConditions()}
+          activeConditionsOp={filterConditionsOp()}
+          onConditionsChange={handleFilterChange}
+        />
+      </details>
 
       <PageState
         loading={loading()}
@@ -303,6 +374,7 @@ export default function AllTransactionsPage() {
             showAccount
             accountNames={accountNames()}
             onReload={loadData}
+            focusId={searchParams.focus}
             onTransactionPatch={patchTransaction}
             onTransactionRemove={removeTransaction}
             onTransactionRestore={restoreTransaction}

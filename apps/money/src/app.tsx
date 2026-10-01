@@ -3,6 +3,7 @@ import { Route, Router } from "@solidjs/router";
 import { createResource, Show } from "solid-js";
 import { clearAuthHint, readAuthHint } from "@shedflare/auth-client/client";
 import "./app.css";
+import "./money.css";
 
 // Lazy-load route components
 import Dashboard from "./routes/index";

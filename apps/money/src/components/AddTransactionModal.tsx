@@ -1,321 +1,293 @@
-import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createSignal, For, onCleanup, Show } from "solid-js";
 import { dispatch, requireCommandId } from "../lib/pending-ops";
 import { api } from "../lib/api";
 import { useCurrency } from "../lib/currency";
 import { emitMoneyDataChanged } from "../lib/data-events";
+import { formatCalendarDate } from "../domain/types";
 import type { AccountsResponse, CategoriesResponse } from "../domain/schemas-client";
+import MoneyDialog from "./MoneyDialog";
+import MoneyIcon from "./MoneyIcon";
 
 type AccountRow = Pick<AccountsResponse["accounts"][number], "id" | "name" | "closed">;
 type CategoryRow = Pick<CategoriesResponse["categories"][number], "id" | "name"> & {
   groupName: string | null;
+  isIncome?: boolean;
 };
-
 interface AddTransactionModalProps {
   accounts: AccountRow[];
   categories: CategoryRow[];
   initialAccountId?: string;
+  initialCategoryId?: string;
   onClose: () => void;
   onCreated?: () => void | Promise<void>;
 }
 
 export default function AddTransactionModal(props: AddTransactionModalProps) {
   const fmt = useCurrency();
-  const rememberedAccountId = globalThis.localStorage?.getItem("money.lastAccountId") ?? "";
+  let remembered = "";
+  try {
+    remembered = localStorage.getItem("money.lastAccountId") ?? "";
+  } catch {
+    /* Account selection also works without browser storage. */
+  }
   const [accountId, setAccountId] = createSignal(
     props.initialAccountId ??
-      (props.accounts.some((account) => account.id === rememberedAccountId && !account.closed)
-        ? rememberedAccountId
-        : ""),
+      (props.accounts.some((account) => account.id === remembered && !account.closed)
+        ? remembered
+        : (props.accounts.find((account) => !account.closed)?.id ?? "")),
   );
   const [kind, setKind] = createSignal<"expense" | "income">("expense");
-  const [txDate, setTxDate] = createSignal(new Date().toISOString().slice(0, 10));
-  const [txPayee, setTxPayee] = createSignal("");
-  const [txAmount, setTxAmount] = createSignal("");
-  const [txCategory, setTxCategory] = createSignal("");
-  const [txNotes, setTxNotes] = createSignal("");
-  const [autoCategory, setAutoCategory] = createSignal<string | null>(null);
+  const [date, setDate] = createSignal(formatCalendarDate(new Date()));
+  const [payee, setPayee] = createSignal("");
+  const [amount, setAmount] = createSignal("");
+  const [category, setCategory] = createSignal(props.initialCategoryId ?? "");
+  const [notes, setNotes] = createSignal("");
   const [saving, setSaving] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
-
-  let payeeInput: HTMLInputElement | undefined;
-  let accountSelect: HTMLSelectElement | undefined;
-  let primarySubmitButton: HTMLButtonElement | undefined;
-  let payeeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-  onMount(() => {
-    if (accountId()) payeeInput?.focus();
-    else accountSelect?.focus();
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !saving()) props.onClose();
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    onCleanup(() => document.removeEventListener("keydown", handleKeyDown));
-  });
-
+  let amountInput: HTMLInputElement | undefined;
+  let debounce: ReturnType<typeof setTimeout> | undefined;
+  let suggestionRequest = 0;
+  let categoryChosen = Boolean(props.initialCategoryId);
   onCleanup(() => {
-    if (payeeDebounceTimer) clearTimeout(payeeDebounceTimer);
+    clearTimeout(debounce);
+    suggestionRequest++;
   });
-
-  createEffect(() => {
-    const autoCat = autoCategory();
-    if (autoCat && !txCategory()) setTxCategory(autoCat);
-  });
-
-  function handlePayeeInput(value: string) {
-    setTxPayee(value);
-    if (payeeDebounceTimer) clearTimeout(payeeDebounceTimer);
-    if (!value.trim()) {
-      setAutoCategory(null);
-      return;
-    }
-
-    payeeDebounceTimer = setTimeout(async () => {
+  function suggest(value: string) {
+    setPayee(value);
+    clearTimeout(debounce);
+    const request = ++suggestionRequest;
+    if (!value.trim() || categoryChosen) return;
+    debounce = setTimeout(async () => {
       try {
-        const data = await api.payeeSuggestions(value.trim());
-        setAutoCategory(data.suggestions[0]?.category_id ?? null);
+        const result = await api.payeeSuggestions(value.trim());
+        if (request !== suggestionRequest || categoryChosen) return;
+        const suggested = result.suggestions[0]?.category_id;
+        const definition = props.categories.find((item) => item.id === suggested);
+        if (definition && (definition.isIncome ?? false) === (kind() === "income"))
+          setCategory(definition.id);
       } catch {
-        setAutoCategory(null);
+        /* A suggestion failure never blocks entry. */
       }
-    }, 300);
+    }, 250);
   }
-
-  async function handleSubmit(event: SubmitEvent) {
+  async function save(event: SubmitEvent) {
     event.preventDefault();
-    setError(null);
-    const shouldAddAnother =
-      event.submitter instanceof HTMLButtonElement && event.submitter.value === "add-another";
-
-    const selectedAccountId = accountId();
-    const inputCents = Math.abs(fmt().parseInput(txAmount()));
-    if (!selectedAccountId) {
-      setError("Choose an account first.");
-      accountSelect?.focus();
+    if (saving()) return;
+    const cents = fmt().parseInput(amount());
+    if (!Number.isSafeInteger(cents) || cents <= 0) {
+      setError("Enter an amount greater than zero.");
+      amountInput?.focus();
       return;
     }
-    if (inputCents === 0) {
-      setError("Enter a non-zero amount.");
+    if (!props.accounts.some((account) => account.id === accountId() && !account.closed)) {
+      setError("Choose an open account.");
       return;
     }
-
-    const amount = kind() === "expense" ? -inputCents : inputCents;
+    const another =
+      event.submitter instanceof HTMLButtonElement && event.submitter.value === "another";
     setSaving(true);
-    const { promise } = dispatch(
-      "create_transaction",
-      {
-        row: {
-          accountId: selectedAccountId,
-          date: txDate(),
-          amount,
-          payee: txPayee() || undefined,
-          notes: txNotes() || undefined,
-          categoryId: txCategory() || null,
-          cleared: true,
-        },
-      },
-      {
-        undoInfo: {
-          label: `Add ${kind()}`,
-          inverse: (data) => ({
-            commandType: "delete_transaction",
-            payload: { id: requireCommandId(data) },
-          }),
-        },
-      },
-    );
-
+    setError(null);
     try {
-      await promise;
-      globalThis.localStorage?.setItem("money.lastAccountId", selectedAccountId);
-      emitMoneyDataChanged();
-      await props.onCreated?.();
-      if (shouldAddAnother) {
-        setTxPayee("");
-        setTxAmount("");
-        setTxCategory("");
-        setTxNotes("");
-        setAutoCategory(null);
-        payeeInput?.focus();
-      } else {
-        props.onClose();
-      }
+      await dispatch(
+        "create_transaction",
+        {
+          row: {
+            accountId: accountId(),
+            date: date(),
+            amount: kind() === "expense" ? -cents : cents,
+            payee: payee().trim() || undefined,
+            categoryId: category() || null,
+            notes: notes().trim() || undefined,
+            cleared: true,
+          },
+        },
+        {
+          undoInfo: {
+            label: `Add ${kind()}`,
+            inverse: (result) => ({
+              commandType: "delete_transaction",
+              payload: { id: requireCommandId(result) },
+            }),
+          },
+        },
+      ).promise;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Failed to add transaction");
-    } finally {
+      setError(caught instanceof Error ? caught.message : "Could not save transaction");
       setSaving(false);
+      return;
+    }
+    try {
+      localStorage.setItem("money.lastAccountId", accountId());
+    } catch {
+      /* Saving a preference must not turn a committed transaction into a failure. */
+    }
+    emitMoneyDataChanged();
+    if (another) {
+      setPayee("");
+      setAmount("");
+      setNotes("");
+      setCategory(
+        kind() === "income"
+          ? (props.categories.find((item) => item.isIncome)?.id ?? "")
+          : (props.initialCategoryId ?? ""),
+      );
+      categoryChosen = kind() === "income" || Boolean(props.initialCategoryId);
+      suggestionRequest++;
+      amountInput?.focus();
+    } else props.onClose();
+    setSaving(false);
+    try {
+      await props.onCreated?.();
+    } catch {
+      /* The transaction is committed; refresh failures must not offer duplicate submission. */
     }
   }
-
   return (
-    <div class="modal-overlay" onClick={() => !saving() && props.onClose()}>
-      <div
-        class="modal modal--wide transaction-composer"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="add-transaction-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div class="modal-header">
-          <div>
-            <h2 id="add-transaction-title">Add Transaction</h2>
-            <p class="modal-subtitle">Record money in or out without leaving this page.</p>
-          </div>
+    <MoneyDialog title="Add transaction" onClose={props.onClose} busy={saving()}>
+      <form class="money-form quick-composer" onSubmit={save}>
+        <div class="segmented-control" aria-label="Transaction type">
           <button
             type="button"
-            class="modal-close"
-            onClick={props.onClose}
+            classList={{ active: kind() === "expense" }}
             disabled={saving()}
-            aria-label="Close add transaction"
+            onClick={() => {
+              setKind("expense");
+              setCategory("");
+              categoryChosen = false;
+              suggestionRequest++;
+            }}
           >
-            ✕
+            Expense
+          </button>
+          <button
+            type="button"
+            classList={{ active: kind() === "income" }}
+            disabled={saving()}
+            onClick={() => {
+              setKind("income");
+              setCategory(props.categories.find((item) => item.isIncome)?.id ?? "");
+              categoryChosen = true;
+              suggestionRequest++;
+            }}
+          >
+            Income
           </button>
         </div>
-
-        <form
-          onSubmit={handleSubmit}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && event.target instanceof HTMLInputElement) {
-              event.preventDefault();
-              event.currentTarget.requestSubmit(primarySubmitButton);
-            }
-          }}
-        >
-          <div class="transaction-kind" role="group" aria-label="Transaction type">
-            <button
-              type="button"
-              class="transaction-kind-option"
-              classList={{ active: kind() === "expense" }}
-              aria-pressed={kind() === "expense"}
-              onClick={() => setKind("expense")}
+        <label class="composer-amount">
+          <span>{fmt().symbol}</span>
+          <input
+            ref={(element) => {
+              amountInput = element;
+            }}
+            aria-label="Amount"
+            autofocus
+            type="text"
+            inputmode={fmt().inputMode}
+            placeholder="0"
+            required
+            value={amount()}
+            onInput={(event) => setAmount(event.currentTarget.value)}
+            disabled={saving()}
+          />
+        </label>
+        <div class="form-group">
+          <label for="transaction-payee">{kind() === "expense" ? "Payee" : "From"}</label>
+          <input
+            id="transaction-payee"
+            type="text"
+            placeholder={kind() === "expense" ? "Where?" : "Who?"}
+            value={payee()}
+            onInput={(event) => suggest(event.currentTarget.value)}
+            disabled={saving()}
+          />
+        </div>
+        <div class="form-group">
+          <label for="transaction-category">Category</label>
+          <select
+            id="transaction-category"
+            value={category()}
+            onChange={(event) => {
+              categoryChosen = true;
+              suggestionRequest++;
+              setCategory(event.currentTarget.value);
+            }}
+            disabled={saving()}
+          >
+            <option value="">Uncategorized</option>
+            <For
+              each={props.categories.filter(
+                (item) => (item.isIncome ?? false) === (kind() === "income"),
+              )}
             >
-              Expense
-            </button>
-            <button
-              type="button"
-              class="transaction-kind-option"
-              classList={{ active: kind() === "income" }}
-              aria-pressed={kind() === "income"}
-              onClick={() => setKind("income")}
-            >
-              Income
-            </button>
-          </div>
-
-          <div class="form-row">
-            <Show when={!props.initialAccountId}>
-              <div class="form-group" style={{ flex: "1 1 220px" }}>
-                <label for="transaction-account">Account</label>
-                <select
-                  id="transaction-account"
-                  ref={(element) => {
-                    accountSelect = element;
-                  }}
-                  value={accountId()}
-                  onChange={(event) => setAccountId(event.currentTarget.value)}
-                  required
-                >
-                  <option value="">Choose account...</option>
-                  <For each={props.accounts.filter((account) => !account.closed)}>
-                    {(account) => <option value={account.id}>{account.name}</option>}
-                  </For>
-                </select>
-              </div>
-            </Show>
-            <div class="form-group" style={{ flex: "0 0 150px" }}>
+              {(item) => (
+                <option value={item.id}>
+                  {item.groupName ? `${item.groupName} / ` : ""}
+                  {item.name}
+                </option>
+              )}
+            </For>
+          </select>
+        </div>
+        <details class="composer-details">
+          <summary>
+            <MoneyIcon name="accounts" size={17} />
+            <span>
+              {props.accounts.find((account) => account.id === accountId())?.name ?? "Account"}
+            </span>
+            <span>{date() === formatCalendarDate(new Date()) ? "Today" : date()}</span>
+            <MoneyIcon name="settings" size={16} />
+          </summary>
+          <div class="composer-detail-fields">
+            <div class="form-group">
+              <label for="transaction-account">Account</label>
+              <select
+                id="transaction-account"
+                value={accountId()}
+                onChange={(event) => setAccountId(event.currentTarget.value)}
+                disabled={saving()}
+              >
+                <For each={props.accounts.filter((account) => !account.closed)}>
+                  {(account) => <option value={account.id}>{account.name}</option>}
+                </For>
+              </select>
+            </div>
+            <div class="form-group">
               <label for="transaction-date">Date</label>
               <input
                 id="transaction-date"
                 type="date"
-                value={txDate()}
-                onInput={(event) => setTxDate(event.currentTarget.value)}
                 required
+                value={date()}
+                onInput={(event) => setDate(event.currentTarget.value)}
+                disabled={saving()}
               />
             </div>
-            <div class="form-group" style={{ flex: "0 0 170px" }}>
-              <label for="transaction-amount">Amount</label>
+            <div class="form-group">
+              <label for="transaction-notes">Note</label>
               <input
-                id="transaction-amount"
-                type="number"
-                min="0"
-                step={fmt().code === "IDR" ? "1" : "0.01"}
-                placeholder="0.00"
-                value={txAmount()}
-                onInput={(event) => setTxAmount(event.currentTarget.value)}
-                required
-              />
-              <span class="field-hint">Enter a positive amount.</span>
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-group" style={{ flex: "1 1 240px" }}>
-              <label for="transaction-payee">Payee</label>
-              <input
-                id="transaction-payee"
-                ref={(element) => {
-                  payeeInput = element;
-                }}
-                type="text"
-                list="tx-payee-list"
-                placeholder="e.g. Grocery Store"
-                value={txPayee()}
-                onInput={(event) => handlePayeeInput(event.currentTarget.value)}
+                id="transaction-notes"
+                value={notes()}
+                onInput={(event) => setNotes(event.currentTarget.value)}
+                disabled={saving()}
               />
             </div>
-            <div class="form-group" style={{ flex: "1 1 220px" }}>
-              <label for="transaction-category">Category</label>
-              <select
-                id="transaction-category"
-                value={txCategory()}
-                onChange={(event) => setTxCategory(event.currentTarget.value)}
-              >
-                <option value="">Uncategorized</option>
-                <For each={props.categories}>
-                  {(category) => (
-                    <option value={category.id}>
-                      {category.groupName ? `${category.groupName}: ` : ""}
-                      {category.name}
-                    </option>
-                  )}
-                </For>
-              </select>
-            </div>
           </div>
-
-          <div class="form-group">
-            <label for="transaction-notes">Notes</label>
-            <input
-              id="transaction-notes"
-              type="text"
-              placeholder="Optional notes"
-              value={txNotes()}
-              onInput={(event) => setTxNotes(event.currentTarget.value)}
-            />
-          </div>
-
-          <Show when={error()}>{(message) => <div class="form-error">{message()}</div>}</Show>
-
-          <div class="form-actions composer-actions">
-            <button type="button" class="btn btn-ghost" onClick={props.onClose} disabled={saving()}>
-              Cancel
-            </button>
-            <button type="submit" class="btn btn-secondary" disabled={saving()} value="add-another">
-              Save &amp; add another
-            </button>
-            <button
-              type="submit"
-              class="btn btn-primary"
-              disabled={saving()}
-              value="close"
-              ref={(element) => {
-                primarySubmitButton = element;
-              }}
-            >
-              {saving() ? "Saving..." : `Add ${kind()}`}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </details>
+        <Show when={error()}>
+          <p class="form-error" role="alert">
+            {error()}
+          </p>
+        </Show>
+        <div class="composer-footer">
+          <button class="btn btn-ghost" type="submit" value="another" disabled={saving()}>
+            Save &amp; another
+          </button>
+          <button class="btn btn-primary" type="submit" disabled={saving()}>
+            {saving() ? "Saving…" : `Add ${kind()}`}
+            <MoneyIcon name="arrow" size={17} />
+          </button>
+        </div>
+      </form>
+    </MoneyDialog>
   );
 }

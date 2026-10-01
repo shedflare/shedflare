@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import { CategoryIconSchema } from "./category-icons";
 import {
   NullableString,
   TransactionInput,
@@ -142,6 +143,7 @@ export const CommandPayloadSchemas = {
     name: Schema.String,
     groupId: NullableString,
     isIncome: Schema.optional(Schema.Boolean),
+    icon: Schema.optional(Schema.NullOr(CategoryIconSchema)),
   }),
 
   update_category: Schema.Struct({
@@ -150,6 +152,7 @@ export const CommandPayloadSchemas = {
     hidden: Schema.optional(Schema.Boolean),
     groupId: Schema.optional(NullableString),
     goalDef: Schema.optional(NullableString),
+    icon: Schema.optional(Schema.NullOr(CategoryIconSchema)),
   }),
 
   delete_category: Schema.Struct({

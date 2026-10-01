@@ -15,10 +15,11 @@
   },
   "scripts": {
     "dev": "vp dev",
+    "dev:demo": "vp exec jiti dev-demo.ts",
     "build": "vp build",
     "preview": "vp preview",
     "test": "vp test",
-    "check": "vp check src build alchemy.run.ts vite.config.ts worker-configuration.d.ts drizzle.config.ts e2e.run.ts playwright.config.ts",
+    "check": "vp check src build dev-demo.ts alchemy.run.ts vite.config.ts worker-configuration.d.ts drizzle.config.ts e2e.run.ts playwright.config.ts",
     "typecheck": "vp check --no-fmt --no-lint",
     "plan": "vp build && pnpm --dir ../.. exec alchemy plan apps/money/alchemy.run.ts",
     "deploy": "pnpm --dir ../.. deploy:money",

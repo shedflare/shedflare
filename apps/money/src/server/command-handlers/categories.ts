@@ -36,6 +36,7 @@ export async function handleCategoryCommands(
       if (p.hidden !== undefined) set.hidden = p.hidden;
       if (p.groupId !== undefined) set.groupId = p.groupId;
       if (p.goalDef !== undefined) set.goalDef = p.goalDef;
+      if (p.icon !== undefined) set.icon = p.icon;
       await db.update(s.categories).set(set).where(eq(s.categories.id, p.id)).run();
       return { ok: true, data: { id: p.id } };
     }

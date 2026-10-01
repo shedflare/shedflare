@@ -1,5 +1,5 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { undo } from "../lib/undo-stack";
+import { undo, historyBusy } from "../lib/undo-stack";
 import {
   OPERATION_FEEDBACK_EVENT,
   OperationFeedbackSchema,
@@ -59,6 +59,7 @@ export default function ToastCenter() {
               <button
                 type="button"
                 class="toast-action"
+                disabled={historyBusy()}
                 onClick={async () => {
                   dismiss(toast.id);
                   await undo();

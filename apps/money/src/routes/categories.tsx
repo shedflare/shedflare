@@ -7,6 +7,8 @@ import { PageState } from "../components/PageState";
 import { useCategoryForm, useCategoryGroupForm } from "../lib/forms/categories";
 import { listenForMoneyDataChanged } from "../lib/data-events";
 import * as Schema from "effect/Schema";
+import type { CategoriesResponse } from "../domain/schemas-client";
+import CategoryBadge from "../components/CategoryBadge";
 
 interface CategoryGroup {
   id: string;
@@ -16,16 +18,10 @@ interface CategoryGroup {
   hidden: boolean;
 }
 
-interface Category {
-  id: string;
-  name: string;
-  groupId: string | null;
-  groupName: string | null;
-  isIncome: boolean;
-  sortOrder: number;
-  goalDef: string | null;
-  hidden: boolean;
-}
+type Category = Pick<
+  CategoriesResponse["categories"][number],
+  "id" | "name" | "groupId" | "isIncome" | "sortOrder" | "goalDef" | "hidden" | "icon"
+> & { groupName: string | null };
 
 type GoalType = "monthly" | "byDate" | "refill" | "periodic" | "percentage";
 const GoalTypeSchema = Schema.Literals(["monthly", "byDate", "refill", "periodic", "percentage"]);
@@ -145,6 +141,7 @@ export default function CategoriesPage() {
       const cats: Category[] = (categoriesData.categories ?? []).map((c) => ({
         id: c.id,
         name: c.name,
+        icon: c.icon ?? null,
         groupId: c.groupId ?? null,
         groupName: c.group_name ?? null,
         isIncome: Boolean(c.isIncome),
@@ -352,7 +349,11 @@ export default function CategoriesPage() {
         label: "Delete category",
         inverse: {
           commandType: "create_category",
-          payload: { name: cat?.name ?? "", groupId: cat?.groupId ?? null },
+          payload: {
+            name: cat?.name ?? "",
+            groupId: cat?.groupId ?? null,
+            icon: cat?.icon ?? null,
+          },
         },
       },
     });
@@ -362,7 +363,7 @@ export default function CategoriesPage() {
   function startEditGoal(cat: Category) {
     const goal = parseGoal(cat.goalDef);
     setGoalType(goal?.type ?? "monthly");
-    setGoalAmount(goal?.amount ? String(goal.amount / 100) : "");
+    setGoalAmount(goal?.amount ? fmt().formatCentsInput(goal.amount) : "");
     setGoalTargetDate(goal?.targetDate ?? "");
     setGoalFrequency(goal?.frequency ?? "quarterly");
     setGoalPercentage(goal?.percentage ? String(goal.percentage) : "10");
@@ -425,7 +426,11 @@ export default function CategoriesPage() {
         ),
       );
     } else {
-      const amount = Math.round(parseFloat(goalAmount() || "0") * 100);
+      const amount = fmt().parseInput(goalAmount() || "0");
+      if (!Number.isSafeInteger(amount)) {
+        setError("Enter a valid target amount.");
+        return;
+      }
       if (amount <= 0) {
         dispatch(
           "update_category",
@@ -472,7 +477,7 @@ export default function CategoriesPage() {
 
   function buildGoalJson(): GoalConfig {
     const t = goalType();
-    const amt = Math.round(parseFloat(goalAmount() || "0") * 100);
+    const amt = fmt().parseInput(goalAmount() || "0");
     const goal: GoalConfig = { type: t, amount: amt };
     if ((t === "byDate" || t === "refill") && goalTargetDate()) {
       goal.targetDate = goalTargetDate();
@@ -858,6 +863,7 @@ export default function CategoriesPage() {
                                 <div
                                   style={{ display: "flex", "align-items": "center", gap: "6px" }}
                                 >
+                                  <CategoryBadge name={cat.name} icon={cat.icon} small />
                                   <span class="payee-name">{cat.name}</span>
                                   <Show when={cat.hidden}>
                                     <span class="goal-badge" style={{ "font-size": "11px" }}>
@@ -987,8 +993,8 @@ export default function CategoriesPage() {
                                   </select>
                                   <Show when={goalType() !== "percentage"}>
                                     <input
-                                      type="number"
-                                      step="0.01"
+                                      type="text"
+                                      inputmode={fmt().inputMode}
                                       placeholder="Amount"
                                       value={goalAmount()}
                                       onInput={(e) => setGoalAmount(e.currentTarget.value)}
