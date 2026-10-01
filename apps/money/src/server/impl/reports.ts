@@ -1,3 +1,5 @@
+import { computeMonthlyReport } from "../monthly-report";
+import { MonthlyReportSchema, validReportMonth } from "../../domain/monthly-report";
 import { eq, sql } from "drizzle-orm";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { moneyApi } from "../definitions";
@@ -32,6 +34,18 @@ type Env = { MONEY_DB: D1Database };
 export function createReportsGroup(env: Env) {
   return HttpApiBuilder.group(moneyApi, "reports", (handlers) =>
     handlers
+      .handleRaw(
+        "monthly",
+        wrapHandler(async (req: Request): Promise<Response> => {
+          const month = new URL(req.url).pathname.split("/").at(-1) ?? "";
+          if (!validReportMonth(month))
+            return Response.json({ error: "Choose a valid report month" }, { status: 400 });
+          return validatedJson(
+            MonthlyReportSchema,
+            await computeMonthlyReport(createDb(env.MONEY_DB), month),
+          );
+        }),
+      )
       .handleRaw(
         "netWorth",
         wrapHandler(async (): Promise<Response> => {

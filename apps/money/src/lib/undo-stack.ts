@@ -22,6 +22,21 @@ function retargetRecreatedEntry(
   resultData: CommandData,
   direction: "undo" | "redo",
 ): UndoEntry {
+  if (
+    direction === "redo" &&
+    entry.forward.commandType === "post_schedule_transaction" &&
+    entry.inverse.commandType === "undo_schedule_payment" &&
+    resultData.transactionId &&
+    entry.inverse.payload instanceof Object
+  ) {
+    return {
+      ...entry,
+      inverse: {
+        ...entry.inverse,
+        payload: { ...entry.inverse.payload, transactionId: resultData.transactionId },
+      },
+    };
+  }
   let restoredId: string;
   try {
     restoredId = Schema.decodeUnknownSync(Schema.String)(resultData.id);

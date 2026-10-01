@@ -1,1093 +1,664 @@
-import { createSignal, For, Show, createEffect, createMemo, onCleanup, onMount } from "solid-js";
-import { dispatch, requireCommandId } from "../lib/pending-ops";
+import { createMemo, createResource, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { useSearchParams } from "@solidjs/router";
 import { api } from "../lib/api";
-import { usePrivacyMode } from "../lib/privacy";
-import { useCurrency } from "../lib/currency";
-import { PageState } from "../components/PageState";
-import { useCategoryForm, useCategoryGroupForm } from "../lib/forms/categories";
-import { listenForMoneyDataChanged } from "../lib/data-events";
-import * as Schema from "effect/Schema";
-import type { CategoriesResponse } from "../domain/schemas-client";
+import { loadRequest, requestValue, requestError } from "../lib/request-state";
+import { dispatch, requireCommandId } from "../lib/pending-ops";
+import { emitMoneyDataChanged, listenForMoneyDataChanged } from "../lib/data-events";
+import type { CommandPayload } from "../lib/api";
+import type { CategoryDefinition } from "../lib/budget-view";
+import type { CategoryGroupsResponse } from "../domain/schemas-client";
+import MoneyDialog from "../components/MoneyDialog";
+import MoneyIcon from "../components/MoneyIcon";
 import CategoryBadge from "../components/CategoryBadge";
-
-interface CategoryGroup {
-  id: string;
-  name: string;
-  isIncome: boolean;
-  sortOrder: number;
-  hidden: boolean;
-}
-
-type Category = Pick<
-  CategoriesResponse["categories"][number],
-  "id" | "name" | "groupId" | "isIncome" | "sortOrder" | "goalDef" | "hidden" | "icon"
-> & { groupName: string | null };
-
-type GoalType = "monthly" | "byDate" | "refill" | "periodic" | "percentage";
-const GoalTypeSchema = Schema.Literals(["monthly", "byDate", "refill", "periodic", "percentage"]);
-
-interface GoalConfig {
-  type: GoalType;
-  amount?: number;
-  targetDate?: string;
-  frequency?: string;
-  percentage?: number;
-}
-
-const GoalConfigSchema = Schema.Struct({
-  type: GoalTypeSchema,
-  amount: Schema.optional(Schema.Number),
-  targetDate: Schema.optional(Schema.String),
-  frequency: Schema.optional(Schema.String),
-  percentage: Schema.optional(Schema.Number),
-});
-
-interface GoalProgress {
-  categoryId: string;
-  goalType: GoalType;
-  goalAmount: number;
-  currentAmount: number;
-  targetDate: string | null;
-}
-
-interface DeleteGroupPayload {
-  id: string;
-  transferToGroupId?: string;
-}
-
-interface DeleteCategoryPayload {
-  id: string;
-  transferToId?: string;
-}
-
+import CategoryEditor from "../components/CategoryEditor";
+import { PageState } from "../components/PageState";
+type Group = CategoryGroupsResponse["groups"][number];
+type GroupForm = { mode: "create" } | { mode: "edit"; group: Group };
+type Deletion =
+  | { kind: "category"; category: CategoryDefinition }
+  | { kind: "group"; group: Group };
 export default function CategoriesPage() {
-  const privacyBlur = usePrivacyMode();
-  const fmt = useCurrency();
-  const [groups, setGroups] = createSignal<CategoryGroup[]>([]);
-  const [categories, setCategories] = createSignal<Category[]>([]);
-  const [loading, setLoading] = createSignal(true);
+  const [params, setParams] = useSearchParams<{ edit?: string; new?: string; group?: string }>();
+  const [query, setQuery] = createSignal("");
+  const [reordering, setReordering] = createSignal(false);
+  const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
-
-  // Add group form
-  const [showAddGroup, setShowAddGroup] = createSignal(false);
-
-  // Add category form
-  const [activeGroupId, setActiveGroupId] = createSignal<string | null>(null);
-
-  // Goal editing
-  const [editingGoalCatId, setEditingGoalCatId] = createSignal<string | null>(null);
-  const [goalType, setGoalType] = createSignal<GoalType>("monthly");
-  const [goalAmount, setGoalAmount] = createSignal("");
-  const [goalTargetDate, setGoalTargetDate] = createSignal("");
-  const [goalFrequency, setGoalFrequency] = createSignal("quarterly");
-  const [goalPercentage, setGoalPercentage] = createSignal("10");
-  const [goalProgress, setGoalProgress] = createSignal<GoalProgress[]>([]);
-
-  const goalProgressMap = createMemo(() => {
-    const map = new Map<string, GoalProgress>();
-    for (const p of goalProgress()) {
-      map.set(p.categoryId, p);
-    }
-    return map;
-  });
-
-  // Group rename
-  const [renamingGroupId, setRenamingGroupId] = createSignal<string | null>(null);
-  const [renameGroupName, setRenameGroupName] = createSignal("");
-
-  // Group delete dialog
-  const [deletingGroupId, setDeletingGroupId] = createSignal<string | null>(null);
-  const [deleteTransferGroupId, setDeleteTransferGroupId] = createSignal<string>("");
-
-  // Category delete with transfer
-  const [deletingCatId, setDeletingCatId] = createSignal<string | null>(null);
-  const [catTransferTargetId, setCatTransferTargetId] = createSignal<string>("");
-
-  // Drag-and-drop reorder
-  const [dragSourceId, setDragSourceId] = createSignal<string | null>(null);
-  const [dragTargetId, setDragTargetId] = createSignal<string | null>(null);
-
-  const {
-    values: valuesGroup,
-    errors: errorsGroup,
-    setValues: setValuesGroup,
-    validate: validateGroup,
-    resetForm: resetFormGroup,
-  } = useCategoryGroupForm();
-  const {
-    values: valuesCategory,
-    errors: errorsCategory,
-    setValues: setValuesCategory,
-    validate: validateCategory,
-    resetForm: resetFormCategory,
-  } = useCategoryForm();
-
-  createEffect(() => {
-    void loadData();
-  });
-
-  onMount(() => {
-    onCleanup(listenForMoneyDataChanged(loadData));
-  });
-
-  async function loadData() {
+  const [groupForm, setGroupForm] = createSignal<GroupForm | null>(null);
+  const [groupName, setGroupName] = createSignal("");
+  const [incomeGroup, setIncomeGroup] = createSignal(false);
+  const [deleting, setDeleting] = createSignal<Deletion | null>(null);
+  const [destination, setDestination] = createSignal("");
+  const [result, { refetch }] = createResource(() =>
+    loadRequest(async () => {
+      const [categories, groups] = await Promise.all([api.categories(), api.categoryGroups()]);
+      return { categories: categories.categories, groups: groups.groups };
+    }),
+  );
+  const data = () => requestValue(result());
+  const orderedGroups = createMemo(() =>
+    [...(data()?.groups ?? [])].sort(
+      (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
+    ),
+  );
+  const orderedCategories = createMemo(() =>
+    [...(data()?.categories ?? [])].sort(
+      (a, b) =>
+        a.sortOrder - b.sortOrder ||
+        a.createdAt.localeCompare(b.createdAt) ||
+        a.id.localeCompare(b.id),
+    ),
+  );
+  const editing = () => orderedCategories().find((row) => row.id === params.edit);
+  const matches = (row: CategoryDefinition) =>
+    row.name.toLocaleLowerCase().includes(query().trim().toLocaleLowerCase());
+  const visibleRows = (id: string | null, isIncome = false) =>
+    orderedCategories().filter(
+      (row) =>
+        row.groupId === id &&
+        (id !== null || row.isIncome === isIncome) &&
+        !row.hidden &&
+        matches(row),
+    );
+  const hiddenRows = createMemo(() =>
+    orderedCategories().filter(
+      (row) =>
+        row.hidden || orderedGroups().some((group) => group.id === row.groupId && group.hidden),
+    ),
+  );
+  onMount(() =>
+    onCleanup(
+      listenForMoneyDataChanged(() => {
+        if (!busy()) void refetch();
+      }),
+    ),
+  );
+  async function mutate(
+    commandType: string,
+    payload: CommandPayload,
+    options?: Parameters<typeof dispatch>[2],
+  ) {
+    if (busy()) return false;
+    setBusy(true);
     setError(null);
     try {
-      const [categoriesData, groupsData, goalProgressData] = await Promise.all([
-        api.categories(),
-        api.categoryGroups(),
-        api.goalProgress(),
-      ]);
-      const cats: Category[] = (categoriesData.categories ?? []).map((c) => ({
-        id: c.id,
-        name: c.name,
-        icon: c.icon ?? null,
-        groupId: c.groupId ?? null,
-        groupName: c.group_name ?? null,
-        isIncome: Boolean(c.isIncome),
-        sortOrder: c.sortOrder ?? 0,
-        goalDef: c.goalDef ?? null,
-        hidden: Boolean(c.hidden),
-      }));
-      setCategories(cats);
-
-      setGroups(
-        (groupsData.groups ?? []).map((g) => ({
-          id: g.id,
-          name: g.name,
-          isIncome: Boolean(g.isIncome),
-          sortOrder: g.sortOrder ?? 0,
-          hidden: Boolean(g.hidden),
-        })),
-      );
-
-      setGoalProgress(
-        goalProgressData.progress.map((p) => ({
-          categoryId: p.categoryId,
-          goalType: Schema.decodeUnknownSync(GoalTypeSchema)(p.goalType),
-          goalAmount: p.goalAmount,
-          currentAmount: p.currentAmount,
-          targetDate: p.targetDate,
-        })),
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load categories");
+      await dispatch(commandType, payload, options).promise;
+      await refetch();
+      emitMoneyDataChanged();
+      return true;
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save change");
+      return false;
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   }
-
-  function handleAddGroup(e: Event) {
-    e.preventDefault();
-    if (!validateGroup()) return;
-    const name = valuesGroup.name.trim();
-    setShowAddGroup(false);
-    void dispatch(
-      "create_category_group",
-      { name, isIncome: valuesGroup.isIncome },
-      {
-        undoInfo: {
-          label: "Create group",
-          inverse: (data) => ({
-            commandType: "delete_category_group",
-            payload: { id: requireCommandId(data) },
-          }),
-        },
-      },
-    ).promise.then(loadData);
-    resetFormGroup();
-  }
-
-  function handleAddCategory(e: Event, groupId: string) {
-    e.preventDefault();
-    if (!validateCategory()) return;
-    const name = valuesCategory.name.trim();
-    setActiveGroupId(null);
-    void dispatch(
-      "create_category",
-      { name, groupId },
-      {
-        undoInfo: {
-          label: "Create category",
-          inverse: (data) => ({
-            commandType: "delete_category",
-            payload: { id: requireCommandId(data) },
-          }),
-        },
-      },
-    ).promise.then(loadData);
-    resetFormCategory();
-  }
-
-  function startRenameGroup(group: CategoryGroup) {
-    setRenamingGroupId(group.id);
-    setRenameGroupName(group.name);
-  }
-
-  function handleRenameGroup(groupId: string) {
-    const name = renameGroupName().trim();
-    if (!name) {
-      cancelRenameGroup();
-      return;
-    }
-    const group = groups().find((g) => g.id === groupId);
-    const oldName = group?.name ?? "";
-    setRenamingGroupId(null);
-    void dispatch(
-      "update_category_group",
-      { id: groupId, name },
-      {
-        undoInfo: {
-          label: "Rename group",
-          inverse: {
-            commandType: "update_category_group",
-            payload: { id: groupId, name: oldName },
-          },
-        },
-      },
-    ).promise.then(loadData);
-  }
-
-  function cancelRenameGroup() {
-    setRenamingGroupId(null);
-    setRenameGroupName("");
-  }
-
-  function handleToggleGroupHidden(group: CategoryGroup) {
-    void dispatch(
-      "update_category_group",
-      { id: group.id, hidden: !group.hidden },
-      {
-        undoInfo: {
-          label: group.hidden ? "Unhide group" : "Hide group",
-          inverse: {
-            commandType: "update_category_group",
-            payload: { id: group.id, hidden: group.hidden },
-          },
-        },
-      },
-    ).promise.then(loadData);
-    setGroups((prev) => prev.map((g) => (g.id === group.id ? { ...g, hidden: !g.hidden } : g)));
-  }
-
-  function handleToggleGroupIsIncome(group: CategoryGroup) {
-    void dispatch(
-      "update_category_group",
-      {
-        id: group.id,
-        isIncome: !group.isIncome,
-      },
-      {
-        undoInfo: {
-          label: group.isIncome ? "Set as expense" : "Set as income",
-          inverse: {
-            commandType: "update_category_group",
-            payload: { id: group.id, isIncome: group.isIncome },
-          },
-        },
-      },
-    ).promise.then(loadData);
-    setGroups((prev) => prev.map((g) => (g.id === group.id ? { ...g, isIncome: !g.isIncome } : g)));
-  }
-
-  function confirmDeleteGroup(groupId: string) {
-    setDeletingGroupId(groupId);
-    setDeleteTransferGroupId("");
-  }
-
-  function handleDeleteGroup() {
-    const groupId = deletingGroupId();
-    if (!groupId) return;
-    const group = groups().find((g) => g.id === groupId);
-    const payload: DeleteGroupPayload = { id: groupId };
-    if (deleteTransferGroupId()) {
-      payload.transferToGroupId = deleteTransferGroupId();
-    }
-    setDeletingGroupId(null);
-    void dispatch("delete_category_group", payload, {
-      undoInfo: {
-        label: "Delete group",
-        inverse: {
-          commandType: "create_category_group",
-          payload: { name: group?.name ?? "", isIncome: group?.isIncome ?? false },
-        },
-      },
-    }).promise.then(loadData);
-    setGroups((prev) => prev.filter((g) => g.id !== groupId));
-  }
-
-  function handleToggleCategoryHidden(cat: Category) {
-    void dispatch(
+  async function toggleHidden(category: CategoryDefinition) {
+    await mutate(
       "update_category",
-      { id: cat.id, hidden: !cat.hidden },
+      { id: category.id, hidden: !category.hidden },
       {
         undoInfo: {
-          label: cat.hidden ? "Unhide category" : "Hide category",
-          inverse: { commandType: "update_category", payload: { id: cat.id, hidden: cat.hidden } },
-        },
-      },
-    ).promise.then(loadData);
-    setCategories((prev) => prev.map((c) => (c.id === cat.id ? { ...c, hidden: !c.hidden } : c)));
-  }
-
-  function confirmDeleteCategory(catId: string) {
-    setDeletingCatId(catId);
-    setCatTransferTargetId("");
-  }
-
-  function handleDeleteCategory() {
-    const catId = deletingCatId();
-    if (!catId) return;
-    const cat = categories().find((c) => c.id === catId);
-    const payload: DeleteCategoryPayload = { id: catId };
-    if (catTransferTargetId()) {
-      payload.transferToId = catTransferTargetId();
-    }
-    setDeletingCatId(null);
-    dispatch("delete_category", payload, {
-      undoInfo: {
-        label: "Delete category",
-        inverse: {
-          commandType: "create_category",
-          payload: {
-            name: cat?.name ?? "",
-            groupId: cat?.groupId ?? null,
-            icon: cat?.icon ?? null,
+          label: category.hidden ? "Show category" : "Hide category",
+          inverse: {
+            commandType: "update_category",
+            payload: { id: category.id, hidden: category.hidden },
           },
         },
       },
-    });
-    setCategories((prev) => prev.filter((c) => c.id !== catId));
+    );
   }
-
-  function startEditGoal(cat: Category) {
-    const goal = parseGoal(cat.goalDef);
-    setGoalType(goal?.type ?? "monthly");
-    setGoalAmount(goal?.amount ? fmt().formatCentsInput(goal.amount) : "");
-    setGoalTargetDate(goal?.targetDate ?? "");
-    setGoalFrequency(goal?.frequency ?? "quarterly");
-    setGoalPercentage(goal?.percentage ? String(goal.percentage) : "10");
-    setEditingGoalCatId(cat.id);
+  function startGroup(group?: Group) {
+    setError(null);
+    setGroupName(group?.name ?? "");
+    setIncomeGroup(group?.isIncome ?? false);
+    setGroupForm(group ? { mode: "edit", group } : { mode: "create" });
   }
-
-  function cancelEditGoal() {
-    setEditingGoalCatId(null);
-    setGoalAmount("");
-    setGoalTargetDate("");
-    setGoalFrequency("quarterly");
-    setGoalPercentage("10");
-  }
-
-  function saveGoal(catId: string) {
-    const cat = categories().find((c) => c.id === catId);
-    const oldGoalDef = cat?.goalDef ?? null;
-    if (goalType() === "percentage") {
-      const pct = parseFloat(goalPercentage() || "0");
-      if (pct <= 0 || pct > 100) {
-        dispatch(
-          "update_category",
-          { id: catId, goalDef: null },
-          {
-            undoInfo: {
-              label: "Remove goal",
-              inverse: {
-                commandType: "update_category",
-                payload: { id: catId, goalDef: oldGoalDef },
+  async function saveGroup(event: SubmitEvent) {
+    event.preventDefault();
+    const form = groupForm();
+    if (!form || !groupName().trim()) return;
+    const name = groupName().trim();
+    const saved =
+      form.mode === "create"
+        ? await mutate(
+            "create_category_group",
+            { name, isIncome: incomeGroup() },
+            {
+              undoInfo: {
+                label: "Add group",
+                inverse: (data) => ({
+                  commandType: "delete_category_group",
+                  payload: { id: requireCommandId(data) },
+                }),
               },
             },
-          },
-        );
-      } else {
-        dispatch(
-          "update_category",
-          {
-            id: catId,
-            goalDef: JSON.stringify({ type: "percentage", percentage: pct }),
-          },
-          {
-            undoInfo: {
-              label: "Set goal",
-              inverse: {
-                commandType: "update_category",
-                payload: { id: catId, goalDef: oldGoalDef },
+          )
+        : await mutate(
+            "update_category_group",
+            { id: form.group.id, name },
+            {
+              undoInfo: {
+                label: "Rename group",
+                inverse: {
+                  commandType: "update_category_group",
+                  payload: { id: form.group.id, name: form.group.name },
+                },
               },
             },
-          },
-        );
-      }
-      setCategories((prev) =>
-        prev.map((c) =>
-          c.id === catId
-            ? {
-                ...c,
-                goalDef: pct > 0 ? JSON.stringify({ type: "percentage", percentage: pct }) : null,
-              }
-            : c,
-        ),
+          );
+    if (saved) setGroupForm(null);
+  }
+  function confirmDelete(value: Deletion) {
+    setError(null);
+    setDestination("");
+    setDeleting(value);
+  }
+  async function remove(event: SubmitEvent) {
+    event.preventDefault();
+    const value = deleting();
+    if (!value) return;
+    const saved =
+      value.kind === "category"
+        ? await mutate("delete_category", {
+            id: value.category.id,
+            transferToId: destination() || null,
+          })
+        : await mutate("delete_category_group", {
+            id: value.group.id,
+            transferToGroupId: destination() || null,
+          });
+    if (saved) setDeleting(null);
+  }
+  async function moveCategory(category: CategoryDefinition, direction: number) {
+    const rows = orderedCategories().filter(
+      (row) =>
+        row.groupId === category.groupId &&
+        row.isIncome === category.isIncome &&
+        row.hidden === category.hidden,
+    );
+    const old = rows.map((row) => row.id);
+    const index = old.indexOf(category.id);
+    const next = [...old];
+    const target = index + direction;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    await mutate(
+      "reorder_categories",
+      { ids: next },
+      {
+        undoInfo: {
+          label: "Reorder categories",
+          inverse: { commandType: "reorder_categories", payload: { ids: old } },
+        },
+      },
+    );
+  }
+  async function moveGroup(group: Group, direction: number) {
+    const old = orderedGroups().map((row) => row.id);
+    const index = old.indexOf(group.id);
+    const next = [...old];
+    const target = index + direction;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    await mutate(
+      "reorder_category_groups",
+      { ids: next },
+      {
+        undoInfo: {
+          label: "Reorder groups",
+          inverse: { commandType: "reorder_category_groups", payload: { ids: old } },
+        },
+      },
+    );
+  }
+  function placeMenu(event: Event) {
+    const menu = event.currentTarget;
+    if (menu instanceof HTMLDetailsElement && menu.open)
+      menu.dataset.direction =
+        innerHeight - menu.getBoundingClientRect().bottom < 260 ? "up" : "down";
+  }
+  function closeMenu(event: MouseEvent) {
+    if (event.currentTarget instanceof HTMLElement)
+      event.currentTarget.closest("details")?.removeAttribute("open");
+  }
+  function CategoryRow(props: { category: CategoryDefinition }) {
+    const siblings = () =>
+      orderedCategories().filter(
+        (row) =>
+          row.groupId === props.category.groupId &&
+          row.isIncome === props.category.isIncome &&
+          row.hidden === props.category.hidden,
       );
-    } else {
-      const amount = fmt().parseInput(goalAmount() || "0");
-      if (!Number.isSafeInteger(amount)) {
-        setError("Enter a valid target amount.");
-        return;
-      }
-      if (amount <= 0) {
-        dispatch(
-          "update_category",
-          { id: catId, goalDef: null },
-          {
-            undoInfo: {
-              label: "Remove goal",
-              inverse: {
-                commandType: "update_category",
-                payload: { id: catId, goalDef: oldGoalDef },
-              },
-            },
-          },
-        );
-      } else {
-        const goal = buildGoalJson();
-        dispatch(
-          "update_category",
-          { id: catId, goalDef: JSON.stringify(goal) },
-          {
-            undoInfo: {
-              label: "Set goal",
-              inverse: {
-                commandType: "update_category",
-                payload: { id: catId, goalDef: oldGoalDef },
-              },
-            },
-          },
-        );
-      }
-      setCategories((prev) =>
-        prev.map((c) =>
-          c.id === catId
-            ? {
-                ...c,
-                goalDef: amount > 0 ? JSON.stringify(buildGoalJson()) : null,
-              }
-            : c,
-        ),
-      );
-    }
-    cancelEditGoal();
+    return (
+      <div class="category-manager-row">
+        <button
+          class="category-manager-open"
+          disabled={busy() || reordering()}
+          onClick={() => setParams({ edit: props.category.id })}
+        >
+          <CategoryBadge name={props.category.name} icon={props.category.icon} />
+          <strong>{props.category.name}</strong>
+        </button>
+        <Show
+          when={reordering()}
+          fallback={
+            <details class="entity-menu" onToggle={placeMenu}>
+              <summary aria-label={`Actions for ${props.category.name}`}>
+                <MoneyIcon name="more" size={18} />
+              </summary>
+              <div class="entity-menu-popover">
+                <button
+                  disabled={busy()}
+                  onClick={(event) => {
+                    closeMenu(event);
+                    setParams({ edit: props.category.id });
+                  }}
+                >
+                  Edit
+                </button>
+                <button
+                  disabled={busy()}
+                  onClick={(event) => {
+                    closeMenu(event);
+                    void toggleHidden(props.category);
+                  }}
+                >
+                  {props.category.hidden ? "Show" : "Hide"}
+                </button>
+                <button
+                  class="text-danger"
+                  disabled={busy()}
+                  onClick={(event) => {
+                    closeMenu(event);
+                    confirmDelete({ kind: "category", category: props.category });
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            </details>
+          }
+        >
+          <div class="reorder-controls">
+            <button
+              class="btn btn-icon btn-ghost"
+              aria-label={`Move ${props.category.name} up`}
+              disabled={busy() || siblings()[0]?.id === props.category.id}
+              onClick={() => void moveCategory(props.category, -1)}
+            >
+              <span aria-hidden="true">↑</span>
+            </button>
+            <button
+              class="btn btn-icon btn-ghost"
+              aria-label={`Move ${props.category.name} down`}
+              disabled={busy() || siblings().at(-1)?.id === props.category.id}
+              onClick={() => void moveCategory(props.category, 1)}
+            >
+              <span aria-hidden="true">↓</span>
+            </button>
+          </div>
+        </Show>
+      </div>
+    );
   }
-
-  function buildGoalJson(): GoalConfig {
-    const t = goalType();
-    const amt = fmt().parseInput(goalAmount() || "0");
-    const goal: GoalConfig = { type: t, amount: amt };
-    if ((t === "byDate" || t === "refill") && goalTargetDate()) {
-      goal.targetDate = goalTargetDate();
-    }
-    if (t === "periodic") {
-      goal.frequency = goalFrequency();
-    }
-    return goal;
-  }
-
-  function parseGoal(goalDef: string | null): GoalConfig | null {
-    if (!goalDef) return null;
-    try {
-      return Schema.decodeUnknownSync(GoalConfigSchema)(JSON.parse(goalDef));
-    } catch {
-      console.warn("[categories] failed to parse goal definition");
-      return null;
-    }
-  }
-
-  function formatGoal(goalDef: string | null): string {
-    const goal = parseGoal(goalDef);
-    if (!goal) return "";
-    const amt = goal.amount ? fmt().formatCents(goal.amount) : "";
-    if (goal.type === "byDate" && goal.targetDate) {
-      return `Save ${amt} by ${goal.targetDate}`;
-    }
-    if (goal.type === "refill") {
-      const byDate = goal.targetDate ? ` by ${goal.targetDate}` : "";
-      return `Refill to ${amt}${byDate}`;
-    }
-    if (goal.type === "periodic") {
-      const freq = goal.frequency ?? "quarterly";
-      return `Budget ${amt} ${freq}`;
-    }
-    if (goal.type === "percentage") {
-      const pct = goal.percentage ?? 0;
-      return `Budget ${pct}% of income`;
-    }
-    return `Set ${amt} monthly`;
-  }
-
-  const grouped = () => {
-    const map = new Map<string | null, Category[]>();
-    for (const cat of categories()) {
-      const list = map.get(cat.groupId) ?? [];
-      list.push(cat);
-      map.set(cat.groupId, list);
-    }
-    for (const group of groups()) {
-      if (!map.has(group.id)) map.set(group.id, []);
-    }
-    return Array.from(map.entries()).sort(([a], [b]) => {
-      const groupA = groups().find((g) => g.id === a);
-      const groupB = groups().find((g) => g.id === b);
-      return (groupA?.sortOrder ?? 0) - (groupB?.sortOrder ?? 0);
-    });
-  };
-
-  const visibleGroups = () =>
-    grouped().filter(([groupId]) => {
-      const group = groups().find((g) => g.id === groupId);
-      return !group?.hidden;
-    });
-
-  const hiddenGroups = () =>
-    grouped().filter(([groupId]) => {
-      const group = groups().find((g) => g.id === groupId);
-      return group?.hidden;
-    });
-
   return (
-    <div class="page">
+    <div class="page categories-manager-page">
       <div class="page-header">
         <h1 class="page-title">Categories</h1>
-        <button class="btn btn-primary btn-sm" onClick={() => setShowAddGroup(true)}>
-          + Add Group
-        </button>
-      </div>
-
-      <Show when={showAddGroup()}>
-        <div class="section">
-          <form onSubmit={handleAddGroup} class="settings-section">
-            <div class="form-row">
-              <div class="form-group" style={{ flex: "1" }}>
-                <label>Group Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Fixed Expenses"
-                  value={valuesGroup.name}
-                  onInput={(e) => setValuesGroup("name", e.currentTarget.value)}
-                  class={errorsGroup.name ? "input-error" : ""}
-                />
-                {errorsGroup.name && <span class="error-message">{errorsGroup.name.message}</span>}
-              </div>
-              <div class="form-check" style={{ "margin-top": "24px" }}>
-                <input
-                  type="checkbox"
-                  id="income-group"
-                  checked={valuesGroup.isIncome}
-                  onChange={(e) => setValuesGroup("isIncome", e.currentTarget.checked)}
-                />
-                <label for="income-group">Income group</label>
-              </div>
-            </div>
-            <div class="form-actions">
-              <button type="button" class="btn btn-ghost" onClick={() => setShowAddGroup(false)}>
-                Cancel
+        <div class="category-manager-actions">
+          <Show
+            when={!reordering()}
+            fallback={
+              <button
+                class="btn btn-secondary"
+                disabled={busy()}
+                onClick={() => setReordering(false)}
+              >
+                Done
               </button>
-              <button type="submit" class="btn btn-primary">
-                Create Group
-              </button>
-            </div>
-          </form>
+            }
+          >
+            <button
+              class="btn btn-primary"
+              disabled={!data() || busy()}
+              onClick={() => setParams({ new: "1", group: undefined })}
+            >
+              <MoneyIcon name="plus" />
+              Add
+            </button>
+            <details class="entity-menu" onToggle={placeMenu}>
+              <summary aria-label="Category actions">
+                <MoneyIcon name="more" />
+              </summary>
+              <div class="entity-menu-popover">
+                <button
+                  disabled={!data() || busy()}
+                  onClick={(event) => {
+                    closeMenu(event);
+                    startGroup();
+                  }}
+                >
+                  Add group
+                </button>
+                <button
+                  disabled={!orderedCategories().length || busy()}
+                  onClick={(event) => {
+                    closeMenu(event);
+                    setQuery("");
+                    setReordering(true);
+                  }}
+                >
+                  Reorder
+                </button>
+              </div>
+            </details>
+          </Show>
         </div>
+      </div>
+      <Show when={error() && !groupForm() && !deleting()}>
+        <p class="form-error" role="alert">
+          {error()}
+        </p>
       </Show>
-
       <PageState
-        loading={loading()}
-        error={error()}
-        onRetry={loadData}
-        loadingMessage="Loading categories..."
+        loading={result.loading && !data()}
+        error={requestError(result())}
+        onRetry={() => void refetch()}
       >
         <Show
-          when={groups().length > 0 || categories().length > 0}
+          when={orderedCategories().length || orderedGroups().length}
           fallback={
-            <div class="empty-state">
-              <p>No categories yet.</p>
-              <p>Create a group above, then add categories to it.</p>
+            <div class="money-empty">
+              <span class="money-empty-icon">
+                <MoneyIcon name="budget" size={32} />
+              </span>
+              <h2>No categories yet</h2>
+              <button class="btn btn-primary" onClick={() => setParams({ new: "1" })}>
+                Add category
+              </button>
             </div>
           }
         >
-          <For each={visibleGroups()}>
-            {([groupId, cats]) => {
-              const group = groups().find((g) => g.id === groupId);
-              return (
-                <div class={`section${group?.isIncome ? " section-income" : ""}`}>
-                  <div
-                    class="budget-group-title"
-                    style={{ display: "flex", "flex-direction": "column", gap: "4px" }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        "justify-content": "space-between",
-                        "align-items": "center",
-                        width: "100%",
-                      }}
-                    >
-                      <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
-                        <Show
-                          when={renamingGroupId() === group?.id}
-                          fallback={
-                            <span
-                              style={{ cursor: "pointer" }}
-                              onClick={() => group && startRenameGroup(group)}
-                              title="Rename group"
-                            >
-                              <span
-                                class={`group-type-indicator ${group?.isIncome ? "group-type-income" : "group-type-expense"}`}
-                              />
-                              {group?.name ?? "Uncategorized"}
-                              {group?.isIncome ? (
-                                <span class="goal-badge" style={{ "margin-left": "8px" }}>
-                                  Income
-                                </span>
-                              ) : null}
-                            </span>
-                          }
-                        >
-                          <form
-                            onSubmit={(e) => {
-                              e.preventDefault();
-                              if (group) handleRenameGroup(group.id);
-                            }}
-                            style={{ display: "inline-flex", gap: "4px" }}
-                          >
-                            <input
-                              type="text"
-                              value={renameGroupName()}
-                              onInput={(e) => setRenameGroupName(e.currentTarget.value)}
-                              autofocus
-                              onBlur={() => {
-                                if (group) handleRenameGroup(group.id);
-                              }}
-                            />
-                          </form>
-                        </Show>
-                      </div>
-                      <div style={{ display: "flex", gap: "4px" }}>
-                        <button
-                          class="btn btn-ghost btn-xs"
-                          onClick={() => group && handleToggleGroupIsIncome(group)}
-                          title={group?.isIncome ? "Switch to expense" : "Switch to income"}
-                        >
-                          {group?.isIncome ? "💰" : "💳"}
-                        </button>
-                        <button
-                          class="btn btn-ghost btn-xs"
-                          onClick={() => group && handleToggleGroupHidden(group)}
-                          title={group?.hidden ? "Show group" : "Hide group"}
-                        >
-                          {group?.hidden ? "👁️" : "👁️‍🗨️"}
-                        </button>
-                        <button
-                          class="btn btn-ghost btn-xs"
-                          onClick={() =>
-                            setActiveGroupId(activeGroupId() === groupId ? null : groupId)
-                          }
-                        >
-                          {activeGroupId() === groupId ? "Cancel" : "+ Category"}
-                        </button>
-                        <Show when={group}>
-                          <button
-                            class="btn btn-icon btn-ghost btn-xs"
-                            onClick={() => group && confirmDeleteGroup(group.id)}
-                            title="Delete group"
-                          >
-                            🗑️
-                          </button>
-                        </Show>
-                      </div>
-                    </div>
-                  </div>
-
-                  <Show when={deletingGroupId() === group?.id}>
-                    <div class="goal-editor">
-                      <div class="form-row">
-                        <select
-                          value={deleteTransferGroupId()}
-                          onChange={(e) => setDeleteTransferGroupId(e.currentTarget.value)}
-                        >
-                          <option value="">Delete categories inside too</option>
-                          <For each={groups().filter((g) => g.id !== groupId && !g.hidden)}>
-                            {(g) => <option value={g.id}>Move categories to {g.name}</option>}
-                          </For>
-                        </select>
-                        <button class="btn btn-primary btn-sm" onClick={handleDeleteGroup}>
-                          Confirm Delete
-                        </button>
-                        <button
-                          class="btn btn-ghost btn-sm"
-                          onClick={() => setDeletingGroupId(null)}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  </Show>
-
-                  <Show when={activeGroupId() === groupId}>
-                    <form
-                      onSubmit={(event) => {
-                        if (groupId) handleAddCategory(event, groupId);
-                      }}
-                      class="settings-section"
-                      style={{ padding: "12px 16px", "margin-bottom": "8px" }}
-                    >
-                      <div class="form-row">
-                        <div class="form-group" style={{ flex: "1", "margin-bottom": 0 }}>
-                          <input
-                            type="text"
-                            placeholder="Category name"
-                            value={valuesCategory.name}
-                            onInput={(e) => setValuesCategory("name", e.currentTarget.value)}
-                            class={errorsCategory.name ? "input-error" : ""}
-                          />
-                          {errorsCategory.name && (
-                            <span class="error-message">{errorsCategory.name.message}</span>
-                          )}
-                        </div>
-                        <button type="submit" class="btn btn-primary btn-sm">
-                          Add
-                        </button>
-                      </div>
-                    </form>
-                  </Show>
-
-                  <div class="category-list">
-                    <For each={cats}>
-                      {(cat, _idx) => {
-                        const isDragging = () => dragSourceId() === cat.id;
-                        const isDragTarget = () => dragTargetId() === cat.id;
-
-                        function handleDragStart(e: DragEvent) {
-                          setDragSourceId(cat.id);
-                          setDragTargetId(null);
-                          if (e.dataTransfer) {
-                            e.dataTransfer.effectAllowed = "move";
-                            e.dataTransfer.setData("text/plain", cat.id);
-                          }
-                        }
-
-                        function handleDragOver(e: DragEvent) {
-                          if (dragSourceId() && dragSourceId() !== cat.id) {
-                            e.preventDefault();
-                            if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-                            setDragTargetId(cat.id);
-                          }
-                        }
-
-                        function handleDragLeave() {
-                          if (dragTargetId() === cat.id) {
-                            setDragTargetId(null);
-                          }
-                        }
-
-                        function handleDrop(e: DragEvent) {
-                          e.preventDefault();
-                          const sourceId = dragSourceId();
-                          const targetId = dragTargetId();
-                          if (!sourceId || !targetId || sourceId === targetId) {
-                            setDragSourceId(null);
-                            setDragTargetId(null);
-                            return;
-                          }
-
-                          const currentCats = categories();
-                          const groupId = cat.groupId;
-                          const groupCats = currentCats
-                            .filter((c) => c.groupId === groupId)
-                            .sort((a, b) => a.sortOrder - b.sortOrder);
-
-                          const sourceIdx = groupCats.findIndex((c) => c.id === sourceId);
-                          const targetIdx = groupCats.findIndex((c) => c.id === targetId);
-                          if (sourceIdx === -1 || targetIdx === -1) {
-                            setDragSourceId(null);
-                            setDragTargetId(null);
-                            return;
-                          }
-
-                          const reordered = [...groupCats];
-                          const [moved] = reordered.splice(sourceIdx, 1);
-                          reordered.splice(targetIdx, 0, moved);
-
-                          dispatch("reorder_categories", { ids: reordered.map((c) => c.id) });
-                          setCategories((prev) => {
-                            const updated = prev.filter((c) => c.groupId !== groupId);
-                            const withNewOrder = reordered.map((c, i) => ({
-                              ...c,
-                              sortOrder: i,
-                            }));
-                            return [...updated, ...withNewOrder].sort(
-                              (a, b) => a.sortOrder - b.sortOrder,
-                            );
-                          });
-
-                          setDragSourceId(null);
-                          setDragTargetId(null);
-                        }
-
-                        function handleDragEnd() {
-                          setDragSourceId(null);
-                          setDragTargetId(null);
-                        }
-
-                        return (
-                          <>
-                            <div
-                              class="payee-row"
-                              classList={{
-                                dragging: isDragging(),
-                                "drag-over": isDragTarget(),
-                              }}
-                              style={{ opacity: cat.hidden ? 0.5 : 1 }}
-                              draggable={true}
-                              onDragStart={handleDragStart}
-                              onDragOver={handleDragOver}
-                              onDragLeave={handleDragLeave}
-                              onDrop={handleDrop}
-                              onDragEnd={handleDragEnd}
-                            >
-                              <span class="drag-handle" title="Drag to reorder">
-                                ⠿
-                              </span>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  "flex-direction": "column",
-                                  gap: "2px",
+          <Show when={!reordering()}>
+            <label class="category-manager-search compact-search">
+              <MoneyIcon name="search" size={17} />
+              <input
+                type="search"
+                aria-label="Find a category"
+                placeholder="Find category"
+                value={query()}
+                onInput={(event) => setQuery(event.currentTarget.value)}
+              />
+            </label>
+          </Show>
+          <div class="category-manager-groups">
+            <For each={orderedGroups().filter((row) => !row.hidden)}>
+              {(group) => (
+                <Show when={!query() || visibleRows(group.id).length}>
+                  <section class="category-manager-group">
+                    <div class="category-manager-group-heading">
+                      <h2>{group.name}</h2>
+                      <Show
+                        when={reordering()}
+                        fallback={
+                          <details class="entity-menu" onToggle={placeMenu}>
+                            <summary aria-label={`Actions for group ${group.name}`}>
+                              <MoneyIcon name="more" size={18} />
+                            </summary>
+                            <div class="entity-menu-popover">
+                              <button
+                                disabled={busy()}
+                                onClick={(event) => {
+                                  closeMenu(event);
+                                  setParams({ new: "1", group: group.id });
                                 }}
                               >
-                                <div
-                                  style={{ display: "flex", "align-items": "center", gap: "6px" }}
-                                >
-                                  <CategoryBadge name={cat.name} icon={cat.icon} small />
-                                  <span class="payee-name">{cat.name}</span>
-                                  <Show when={cat.hidden}>
-                                    <span class="goal-badge" style={{ "font-size": "11px" }}>
-                                      Hidden
-                                    </span>
-                                  </Show>
-                                </div>
-                                <Show when={cat.goalDef}>
-                                  <span class="goal-badge">{formatGoal(cat.goalDef)}</span>
-                                  <Show when={goalProgressMap().get(cat.id)}>
-                                    {(progress) => {
-                                      const p = progress();
-                                      const pct =
-                                        p.goalAmount > 0
-                                          ? Math.min(
-                                              Math.round(
-                                                (Math.abs(p.currentAmount) / p.goalAmount) * 100,
-                                              ),
-                                              100,
-                                            )
-                                          : 0;
-                                      const status =
-                                        pct >= 100 ? "funded" : pct >= 50 ? "partial" : "under";
-                                      return (
-                                        <div class="goal-progress">
-                                          <div class="goal-progress-bar">
-                                            <div
-                                              class={`goal-progress-fill goal-progress-${status}`}
-                                              style={{ width: `${pct}%` }}
-                                            />
-                                          </div>
-                                          <span
-                                            class={`goal-progress-label goal-progress-${status} ${privacyBlur().blurClass()}`}
-                                          >
-                                            {p.goalType === "monthly"
-                                              ? `${fmt().formatCents(Math.abs(p.currentAmount))} / ${fmt().formatCents(p.goalAmount)}`
-                                              : p.goalType === "percentage"
-                                                ? `${(p.currentAmount / 100).toFixed(2)}% / ${p.goalAmount}%`
-                                                : `${fmt().formatCents(Math.abs(p.currentAmount))} / ${fmt().formatCents(p.goalAmount)}`}
-                                            <Show when={p.goalType === "byDate" && p.targetDate}>
-                                              {" "}
-                                              by {p.targetDate}
-                                            </Show>
-                                            <Show when={p.goalType === "refill"}>
-                                              {" "}
-                                              <Show when={p.targetDate}>by {p.targetDate}</Show>
-                                            </Show>
-                                          </span>
-                                        </div>
-                                      );
-                                    }}
-                                  </Show>
-                                </Show>
-                              </div>
-                              <div style={{ display: "flex", gap: "4px" }}>
-                                <button
-                                  class="btn btn-ghost btn-xs"
-                                  onClick={() => handleToggleCategoryHidden(cat)}
-                                  title={cat.hidden ? "Unhide" : "Hide"}
-                                >
-                                  {cat.hidden ? "👁️" : "👁️‍🗨️"}
-                                </button>
-                                <button
-                                  class="btn btn-ghost btn-xs"
-                                  onClick={() => startEditGoal(cat)}
-                                  title="Set goal"
-                                >
-                                  🎯
-                                </button>
-                                <button
-                                  class="btn btn-icon btn-ghost btn-xs"
-                                  onClick={() => confirmDeleteCategory(cat.id)}
-                                >
-                                  🗑️
-                                </button>
-                              </div>
+                                Add category
+                              </button>
+                              <button
+                                disabled={busy()}
+                                onClick={(event) => {
+                                  closeMenu(event);
+                                  startGroup(group);
+                                }}
+                              >
+                                Rename
+                              </button>
+                              <button
+                                class="text-danger"
+                                disabled={busy()}
+                                onClick={(event) => {
+                                  closeMenu(event);
+                                  confirmDelete({ kind: "group", group });
+                                }}
+                              >
+                                Delete group
+                              </button>
                             </div>
-                            <Show when={deletingCatId() === cat.id}>
-                              <div class="goal-editor">
-                                <div class="form-row">
-                                  <select
-                                    value={catTransferTargetId()}
-                                    onChange={(e) => setCatTransferTargetId(e.currentTarget.value)}
-                                  >
-                                    <option value="">Delete permanently</option>
-                                    <For
-                                      each={categories().filter(
-                                        (c) => c.id !== cat.id && !c.hidden,
-                                      )}
-                                    >
-                                      {(c) => <option value={c.id}>Transfer to {c.name}</option>}
-                                    </For>
-                                  </select>
-                                  <button
-                                    class="btn btn-primary btn-sm"
-                                    onClick={handleDeleteCategory}
-                                  >
-                                    Confirm Delete
-                                  </button>
-                                  <button
-                                    class="btn btn-ghost btn-sm"
-                                    onClick={() => setDeletingCatId(null)}
-                                  >
-                                    Cancel
-                                  </button>
-                                </div>
-                              </div>
-                            </Show>
-                            <Show when={editingGoalCatId() === cat.id}>
-                              <div class="goal-editor">
-                                <div class="form-row">
-                                  <select
-                                    value={goalType()}
-                                    onChange={(e) =>
-                                      setGoalType(
-                                        Schema.decodeUnknownSync(GoalTypeSchema)(
-                                          e.currentTarget.value,
-                                        ),
-                                      )
-                                    }
-                                  >
-                                    <option value="monthly">Monthly amount</option>
-                                    <option value="byDate">Save up by date</option>
-                                    <option value="refill">Refill target balance</option>
-                                    <option value="periodic">Periodic allocation</option>
-                                    <option value="percentage">% of income</option>
-                                  </select>
-                                  <Show when={goalType() !== "percentage"}>
-                                    <input
-                                      type="text"
-                                      inputmode={fmt().inputMode}
-                                      placeholder="Amount"
-                                      value={goalAmount()}
-                                      onInput={(e) => setGoalAmount(e.currentTarget.value)}
-                                    />
-                                  </Show>
-                                  <Show when={goalType() === "percentage"}>
-                                    <input
-                                      type="number"
-                                      step="0.1"
-                                      min="0.1"
-                                      max="100"
-                                      placeholder="Percent"
-                                      value={goalPercentage()}
-                                      onInput={(e) => setGoalPercentage(e.currentTarget.value)}
-                                    />
-                                    <span
-                                      style={{
-                                        "align-self": "center",
-                                        color: "var(--text-muted)",
-                                        "font-size": "0.85rem",
-                                      }}
-                                    >
-                                      %
-                                    </span>
-                                  </Show>
-                                  <Show when={goalType() === "byDate" || goalType() === "refill"}>
-                                    <input
-                                      type="month"
-                                      value={goalTargetDate()}
-                                      onInput={(e) => setGoalTargetDate(e.currentTarget.value)}
-                                    />
-                                  </Show>
-                                  <Show when={goalType() === "periodic"}>
-                                    <select
-                                      value={goalFrequency()}
-                                      onChange={(e) => setGoalFrequency(e.currentTarget.value)}
-                                    >
-                                      <option value="quarterly">Every 3 months</option>
-                                      <option value="biannual">Every 6 months</option>
-                                      <option value="yearly">Every 12 months</option>
-                                    </select>
-                                  </Show>
-                                  <button
-                                    class="btn btn-primary btn-sm"
-                                    onClick={() => saveGoal(cat.id)}
-                                  >
-                                    Save
-                                  </button>
-                                  <button class="btn btn-ghost btn-sm" onClick={cancelEditGoal}>
-                                    Cancel
-                                  </button>
-                                </div>
-                              </div>
-                            </Show>
-                          </>
-                        );
-                      }}
+                          </details>
+                        }
+                      >
+                        <div class="reorder-controls">
+                          <button
+                            class="btn btn-icon btn-ghost"
+                            aria-label={`Move group ${group.name} up`}
+                            disabled={busy() || orderedGroups()[0]?.id === group.id}
+                            onClick={() => void moveGroup(group, -1)}
+                          >
+                            ↑
+                          </button>
+                          <button
+                            class="btn btn-icon btn-ghost"
+                            aria-label={`Move group ${group.name} down`}
+                            disabled={busy() || orderedGroups().at(-1)?.id === group.id}
+                            onClick={() => void moveGroup(group, 1)}
+                          >
+                            ↓
+                          </button>
+                        </div>
+                      </Show>
+                    </div>
+                    <For each={visibleRows(group.id)}>
+                      {(category) => <CategoryRow category={category} />}
                     </For>
+                    <Show when={!visibleRows(group.id).length}>
+                      <button
+                        class="category-group-add text-button"
+                        disabled={busy()}
+                        onClick={() => setParams({ new: "1", group: group.id })}
+                      >
+                        <MoneyIcon name="plus" size={16} />
+                        Add category
+                      </button>
+                    </Show>
+                  </section>
+                </Show>
+              )}
+            </For>
+            <For each={[false, true]}>
+              {(income) => (
+                <Show when={visibleRows(null, income).length}>
+                  <section class="category-manager-group">
+                    <div class="category-manager-group-heading">
+                      <h2>{income ? "Income" : "Other"}</h2>
+                    </div>
+                    <For each={visibleRows(null, income)}>
+                      {(category) => <CategoryRow category={category} />}
+                    </For>
+                  </section>
+                </Show>
+              )}
+            </For>
+          </div>
+          <Show when={query() && !orderedCategories().some((row) => !row.hidden && matches(row))}>
+            <p class="quiet-empty">No matching categories</p>
+          </Show>
+          <Show when={hiddenRows().length || orderedGroups().some((row) => row.hidden)}>
+            <details class="category-hidden form-disclosure">
+              <summary>
+                Hidden <span>{hiddenRows().length}</span>
+              </summary>
+              <For each={orderedGroups().filter((row) => row.hidden)}>
+                {(group) => (
+                  <div class="category-hidden-group">
+                    <strong>{group.name}</strong>
+                    <button
+                      class="text-button"
+                      disabled={busy()}
+                      onClick={() =>
+                        void mutate(
+                          "update_category_group",
+                          { id: group.id, hidden: false },
+                          {
+                            undoInfo: {
+                              label: "Show group",
+                              inverse: {
+                                commandType: "update_category_group",
+                                payload: { id: group.id, hidden: true },
+                              },
+                            },
+                          },
+                        )
+                      }
+                    >
+                      Show group
+                    </button>
                   </div>
-                </div>
-              );
-            }}
-          </For>
-
-          <Show when={hiddenGroups().length > 0}>
-            <div class="section">
-              <div class="budget-group-title">
-                <span style={{ opacity: 0.5 }}>Hidden Groups ({hiddenGroups().length})</span>
-              </div>
-              <div class="category-list">
-                <For each={hiddenGroups()}>
-                  {([groupId]) => {
-                    const group = groups().find((g) => g.id === groupId);
-                    if (!group) return null;
-                    return (
-                      <div class="payee-row" style={{ opacity: 0.5 }}>
-                        <span class="payee-name">{group.name}</span>
-                        <button
-                          class="btn btn-ghost btn-xs"
-                          onClick={() => handleToggleGroupHidden(group)}
-                          title="Unhide group"
-                        >
-                          👁️
-                        </button>
-                      </div>
-                    );
-                  }}
-                </For>
-              </div>
-            </div>
+                )}
+              </For>
+              <For each={hiddenRows().filter(matches)}>
+                {(category) => <CategoryRow category={category} />}
+              </For>
+            </details>
           </Show>
         </Show>
       </PageState>
+      <Show when={data() && (params.new === "1" || editing())}>
+        <CategoryEditor
+          category={editing()}
+          groups={orderedGroups()}
+          initialGroupId={params.group}
+          onClose={() => setParams({ new: undefined, edit: undefined, group: undefined })}
+        />
+      </Show>
+      <Show when={groupForm()}>
+        <MoneyDialog
+          title={groupForm()?.mode === "create" ? "Add group" : "Rename group"}
+          busy={busy()}
+          onClose={() => setGroupForm(null)}
+        >
+          <form class="money-form" onSubmit={saveGroup}>
+            <div class="form-group">
+              <label for="group-name">Name</label>
+              <input
+                id="group-name"
+                required
+                value={groupName()}
+                disabled={busy()}
+                onInput={(event) => setGroupName(event.currentTarget.value)}
+              />
+            </div>
+            <Show when={groupForm()?.mode === "create"}>
+              <div class="form-group">
+                <label for="group-type">Type</label>
+                <select
+                  id="group-type"
+                  value={incomeGroup() ? "income" : "expense"}
+                  disabled={busy()}
+                  onChange={(event) => setIncomeGroup(event.currentTarget.value === "income")}
+                >
+                  <option value="expense">Expense</option>
+                  <option value="income">Income</option>
+                </select>
+              </div>
+            </Show>
+            <Show when={error()}>
+              <p class="form-error" role="alert">
+                {error()}
+              </p>
+            </Show>
+            <button type="submit" class="btn btn-primary btn-full" disabled={busy()}>
+              {busy() ? "Saving…" : "Save group"}
+            </button>
+          </form>
+        </MoneyDialog>
+      </Show>
+      <Show when={deleting()} keyed>
+        {(value) => (
+          <MoneyDialog
+            title={`Delete ${value.kind === "category" ? value.category.name : value.group.name}?`}
+            busy={busy()}
+            onClose={() => setDeleting(null)}
+          >
+            <form class="money-form" onSubmit={remove}>
+              <Show
+                when={value.kind === "category"}
+                fallback={<p class="delete-context">Categories and their history stay intact.</p>}
+              >
+                <p class="delete-context">Monthly assignments will be removed.</p>
+              </Show>
+              <div class="form-group">
+                <label for="delete-destination">
+                  {value.kind === "category" ? "Move activity to" : "Move categories to"}
+                </label>
+                <select
+                  id="delete-destination"
+                  value={destination()}
+                  disabled={busy()}
+                  onChange={(event) => setDestination(event.currentTarget.value)}
+                >
+                  <option value="">{value.kind === "category" ? "Uncategorized" : "Other"}</option>
+                  <Show
+                    when={value.kind === "category"}
+                    fallback={
+                      <For
+                        each={orderedGroups().filter(
+                          (row) =>
+                            value.kind === "group" &&
+                            row.id !== value.group.id &&
+                            row.isIncome === value.group.isIncome,
+                        )}
+                      >
+                        {(row) => <option value={row.id}>{row.name}</option>}
+                      </For>
+                    }
+                  >
+                    <For
+                      each={orderedCategories().filter(
+                        (row) =>
+                          value.kind === "category" &&
+                          row.id !== value.category.id &&
+                          row.isIncome === value.category.isIncome &&
+                          !row.hidden,
+                      )}
+                    >
+                      {(row) => <option value={row.id}>{row.name}</option>}
+                    </For>
+                  </Show>
+                </select>
+              </div>
+              <Show when={error()}>
+                <p class="form-error" role="alert">
+                  {error()}
+                </p>
+              </Show>
+              <div class="form-actions">
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  disabled={busy()}
+                  onClick={() => setDeleting(null)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" class="btn btn-danger" disabled={busy()}>
+                  {busy() ? "Deleting…" : "Delete"}
+                </button>
+              </div>
+            </form>
+          </MoneyDialog>
+        )}
+      </Show>
     </div>
   );
 }

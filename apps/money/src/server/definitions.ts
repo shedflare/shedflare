@@ -69,6 +69,7 @@ export const filtersGroup = HttpApiGroup.make("filters").add(
 // ── Reports ─────────────────────────────────────────────────────────
 
 export const reportsGroup = HttpApiGroup.make("reports").add(
+  HttpApiEndpoint.get("monthly", "/api/reports/monthly/:month"),
   HttpApiEndpoint.get("netWorth", "/api/reports/net-worth"),
   HttpApiEndpoint.get("cashFlow", "/api/reports/cash-flow"),
   HttpApiEndpoint.get("spending", "/api/reports/spending"),

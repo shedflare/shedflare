@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import { SetupInputSchema } from "./setup";
 import { CategoryIconSchema } from "./category-icons";
 import {
   NullableString,
@@ -17,6 +18,7 @@ import {
 
 // Effect Schema validators for each command type (used for validation in command handlers)
 export const CommandPayloadSchemas = {
+  setup_money: SetupInputSchema,
   create_account: Schema.Struct({
     name: Schema.String,
     offBudget: Schema.optional(Schema.Boolean),
@@ -51,14 +53,36 @@ export const CommandPayloadSchemas = {
     row: TransactionInput,
   }),
 
+  create_account_transfer: Schema.Struct({
+    fromAccountId: Schema.String,
+    toAccountId: Schema.String,
+    amount: Schema.Number,
+    date: Schema.String,
+    notes: Schema.optional(NullableString),
+    fromPayee: Schema.optional(NullableString),
+    toPayee: Schema.optional(NullableString),
+    fromNotes: Schema.optional(NullableString),
+    toNotes: Schema.optional(NullableString),
+    fromCleared: Schema.optional(Schema.Boolean),
+    toCleared: Schema.optional(Schema.Boolean),
+  }),
+
+  delete_account_transfer: Schema.Struct({ id: Schema.String }),
+
+  reconcile_account: Schema.Struct({
+    accountId: Schema.String,
+    expectedBalance: Schema.Number,
+    statementBalance: Schema.Number,
+  }),
+
   update_transaction: Schema.Struct({
     id: Schema.String,
     fields: Schema.Struct({
       accountId: Schema.optional(Schema.String),
       categoryId: Schema.optional(NullableString),
       amount: Schema.optional(Schema.Number),
-      payee: Schema.optional(Schema.String),
-      notes: Schema.optional(Schema.String),
+      payee: Schema.optional(NullableString),
+      notes: Schema.optional(NullableString),
       date: Schema.optional(Schema.String),
       cleared: Schema.optional(Schema.Boolean),
       reconciled: Schema.optional(Schema.Boolean),
@@ -80,12 +104,26 @@ export const CommandPayloadSchemas = {
     accountId: Schema.String,
     transactions: Schema.Array(ParsedTransaction),
     isPreview: Schema.optional(Schema.Boolean),
+    requestId: Schema.optional(Schema.String),
+    skipDuplicates: Schema.optional(Schema.Boolean),
   }),
+
+  undo_transaction_import: Schema.Struct({ id: Schema.String }),
 
   set_budget_amount: Schema.Struct({
     month: Schema.Number,
     categoryId: Schema.String,
     amount: Schema.Number,
+  }),
+
+  allocate_budget: Schema.Struct({
+    month: Schema.String,
+    allocations: Schema.Array(Schema.Struct({ categoryId: Schema.String, amount: Schema.Number })),
+  }),
+
+  set_budget_plan: Schema.Struct({
+    month: Schema.String,
+    assignments: Schema.Array(Schema.Struct({ categoryId: Schema.String, amount: Schema.Number })),
   }),
 
   set_budget_carryover: Schema.Struct({
@@ -177,6 +215,8 @@ export const CommandPayloadSchemas = {
     isIncome: Schema.optional(Schema.Boolean),
   }),
 
+  reorder_category_groups: Schema.Struct({ ids: Schema.Array(Schema.String) }),
+
   reorder_categories: Schema.Struct({
     ids: Schema.Array(Schema.String),
   }),
@@ -209,7 +249,10 @@ export const CommandPayloadSchemas = {
 
   update_schedule: Schema.Struct({
     id: Schema.String,
-    fields: ScheduleInput,
+    fields: Schema.Struct({
+      ...ScheduleInput.fields,
+      recurrenceRules: Schema.optional(Schema.String),
+    }),
   }),
 
   delete_schedule: Schema.Struct({
@@ -222,6 +265,14 @@ export const CommandPayloadSchemas = {
 
   post_schedule_transaction: Schema.Struct({
     scheduleId: Schema.String,
+  }),
+
+  undo_schedule_payment: Schema.Struct({
+    scheduleId: Schema.String,
+    transactionId: Schema.String,
+    nextDate: NullableString,
+    completed: Schema.Boolean,
+    recurrenceRules: Schema.String,
   }),
 
   create_rule: Schema.Struct({

@@ -1,3 +1,4 @@
+import { MonthlyReportSchema } from "../domain/monthly-report";
 /**
  * Schema-validated REST API client for the money app.
  * Every response is decoded against an Effect Schema at runtime.
@@ -5,6 +6,7 @@
 
 import * as S from "effect/Schema";
 import {
+  SettingsResponseSchema,
   AccountsResponseSchema,
   AccountApiSchema,
   AccountTransactionsResponseSchema,
@@ -112,6 +114,7 @@ export async function execute<Payload>(
 // ── Typed API functions ────────────────────────────────────────────────
 
 export const api = {
+  settings: () => fetchApi(SettingsResponseSchema, "/api/settings"),
   accounts: () => fetchApi(AccountsResponseSchema, "/api/accounts"),
   account: (id: string) => fetchApi(AccountApiSchema, `/api/accounts/${id}`),
   accountTransactions: (id: string, query?: string | TransactionListQuery) => {
@@ -158,6 +161,8 @@ export const api = {
   filters: () => fetchApi(FiltersResponseSchema, "/api/filters"),
 
   reports: {
+    monthly: (month: string) =>
+      fetchApi(MonthlyReportSchema, `/api/reports/monthly/${encodeURIComponent(month)}`),
     netWorth: () => fetchApi(ReportsNetWorthResponseSchema, "/api/reports/net-worth"),
     cashFlow: () => fetchApi(ReportsCashFlowResponseSchema, "/api/reports/cash-flow"),
     spending: () => fetchApi(ReportsSpendingResponseSchema, "/api/reports/spending"),

@@ -14,6 +14,8 @@ export type MoneyIconName =
   | "settings"
   | "more"
   | "check"
+  | "chevron"
+  | "copy"
   | "chart";
 
 export default function MoneyIcon(props: { name: MoneyIconName; size?: number }) {
@@ -76,6 +78,13 @@ export default function MoneyIcon(props: { name: MoneyIconName; size?: number })
         </Match>
         <Match when={props.name === "check"}>
           <path d="m5 12 4 4L19 6" />
+        </Match>
+        <Match when={props.name === "chevron"}>
+          <path d="m6 9 6 6 6-6" />
+        </Match>
+        <Match when={props.name === "copy"}>
+          <rect x="8" y="8" width="12" height="13" rx="2" />
+          <path d="M15 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" />
         </Match>
         <Match when={props.name === "chart"}>
           <path d="M4 20V4m0 16h16M8 15l4-5 4 3 4-7" />

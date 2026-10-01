@@ -18,9 +18,12 @@ import { useMoneyShell } from "../components/MoneyShellContext";
 import MoneyIcon from "../components/MoneyIcon";
 import CategoryDrawer from "../components/CategoryDrawer";
 import CategoryBadge from "../components/CategoryBadge";
+import MoneySetup from "../components/MoneySetup";
+import { readSetupState } from "../domain/setup";
 
 export default function Dashboard() {
   const shell = useMoneyShell();
+  const [showSetup, setShowSetup] = createSignal(false);
   const fmt = useCurrency();
   const df = useDateFormat();
   const privacy = usePrivacyMode();
@@ -30,12 +33,18 @@ export default function Dashboard() {
   const [query, setQuery] = createSignal("");
   const [dataResult, { refetch }] = createResource(() =>
     loadRequest(async () => {
-      const [budget, definitions, accounts] = await Promise.all([
+      const [budget, definitions, accounts, settings] = await Promise.all([
         api.budgetMonth(toMonthInt(month)),
         api.categories(),
         api.accounts(),
+        api.settings(),
       ]);
-      return { budget, definitions: definitions.categories, accounts: accounts.accounts };
+      return {
+        budget,
+        definitions: definitions.categories,
+        accounts: accounts.accounts,
+        settings: settings.settings,
+      };
     }),
   );
   const data = () => requestValue(dataResult());
@@ -102,6 +111,15 @@ export default function Dashboard() {
   const activeAccounts = createMemo(() =>
     (data()?.accounts ?? []).filter((account) => !account.closed),
   );
+  const canSetup = () =>
+    !!data() &&
+    data()!.accounts.length === 0 &&
+    data()!.definitions.length === 0 &&
+    readSetupState(data()?.settings.find((row) => row.key === "money_setup")?.value)?.state !==
+      "complete";
+  const setupSkipped = () =>
+    readSetupState(data()?.settings.find((row) => row.key === "money_setup")?.value)?.state ===
+    "skipped";
   return (
     <div class="page daily-page">
       <div class="page-header">
@@ -130,15 +148,35 @@ export default function Dashboard() {
         <Show
           when={activeAccounts().length > 0}
           fallback={
-            <div class="first-step">
-              <span class="first-step-icon">
+            <div class="money-empty home-start">
+              <span class="money-empty-icon">
                 <MoneyIcon name="accounts" size={36} />
               </span>
-              <h2>Your money, your plan.</h2>
-              <A class="btn btn-primary" href="/accounts?new=1">
-                <MoneyIcon name="plus" />
-                Add an account
-              </A>
+              <h2>{canSetup() ? "Make yourself at home" : "No open accounts"}</h2>
+              <Show
+                when={canSetup() && !setupSkipped()}
+                fallback={
+                  <A class="btn btn-primary" href="/accounts?new=1">
+                    <MoneyIcon name="plus" />
+                    Add an account
+                  </A>
+                }
+              >
+                <button class="btn btn-primary" onClick={() => setShowSetup(true)}>
+                  Set up Money
+                  <MoneyIcon name="arrow" size={17} />
+                </button>
+              </Show>
+              <Show when={canSetup() && setupSkipped()}>
+                <button class="text-button" onClick={() => setShowSetup(true)}>
+                  Set up Money
+                </button>
+              </Show>
+              <Show when={!canSetup()}>
+                <A class="text-button" href="/accounts">
+                  View accounts
+                </A>
+              </Show>
             </div>
           }
         >
@@ -227,7 +265,7 @@ export default function Dashboard() {
                 fallback={
                   <div class="first-step first-step-small">
                     <MoneyIcon name="budget" size={32} />
-                    <h3>Make room for what matters.</h3>
+                    <h3>No categories yet</h3>
                     <A href="/budget?new=1" class="btn btn-primary">
                       Add a category
                     </A>
@@ -443,6 +481,19 @@ export default function Dashboard() {
           </div>
         </Show>
       </PageState>
+      <Show when={showSetup()}>
+        <MoneySetup
+          initialCurrency={
+            data()?.settings.find((row) => row.key === "display_currency")?.value === "IDR"
+              ? "IDR"
+              : "USD"
+          }
+          onClose={() => {
+            setShowSetup(false);
+            void refetch();
+          }}
+        />
+      </Show>
       <Show when={selected()} keyed>
         {(category) => (
           <CategoryDrawer

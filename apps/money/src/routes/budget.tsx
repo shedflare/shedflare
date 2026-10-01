@@ -7,17 +7,14 @@ import { emitMoneyDataChanged, listenForMoneyDataChanged } from "../lib/data-eve
 import { useCurrency } from "../lib/currency";
 import { useDateFormat } from "../lib/date-format";
 import { usePrivacyMode } from "../lib/privacy";
-import {
-  currentMonthKey,
-  shiftMonth,
-  expenseCategories,
-  monthlyTarget,
-  type BudgetCategory,
-} from "../lib/budget-view";
+import { currentMonthKey, shiftMonth, expenseCategories } from "../lib/budget-view";
 import { toMonthInt } from "../domain/types";
 import MoneyIcon from "../components/MoneyIcon";
 import MoneyDialog from "../components/MoneyDialog";
 import MoveMoneyDialog from "../components/MoveMoneyDialog";
+import BudgetReference from "../components/BudgetReference";
+import MonthlyPlanDialog from "../components/MonthlyPlanDialog";
+import { monthlyPlan } from "../lib/monthly-plan";
 import CategoryDrawer from "../components/CategoryDrawer";
 import { PageState } from "../components/PageState";
 import CategoryBadge from "../components/CategoryBadge";
@@ -43,8 +40,10 @@ export default function BudgetPage() {
       ? (params.month ?? currentMonthKey())
       : currentMonthKey(),
   );
+  const previousMonth = createMemo(() => shiftMonth(month(), -1));
   const [query, setQuery] = createSignal("");
-  const [filter, setFilter] = createSignal<"all" | "overspent" | "target">("all");
+  const [revealed, setRevealed] = createSignal<string | null>(null);
+  const [planning, setPlanning] = createSignal(false);
   const [moving, setMoving] = createSignal(false);
   const [newCategory, setNewCategory] = createSignal(params.new === "1");
   const [buffering, setBuffering] = createSignal(false);
@@ -69,11 +68,19 @@ export default function BudgetPage() {
       return { budget, definitions: categories.categories, groups: groups.groups };
     }),
   );
+  const [previousResult, { refetch: refetchPrevious }] = createResource(previousMonth, (key) =>
+    loadRequest(async () => ({ month: key, budget: await api.budgetMonth(toMonthInt(key)) })),
+  );
+  const previous = () => {
+    const value = requestValue(previousResult());
+    return value?.month === previousMonth() ? value.budget : undefined;
+  };
   const data = () => requestValue(dataResult());
   onMount(() =>
     onCleanup(
       listenForMoneyDataChanged(() => {
         void refetch();
+        void refetchPrevious();
       }),
     ),
   );
@@ -83,25 +90,9 @@ export default function BudgetPage() {
   const selected = createMemo(() =>
     categories().find((category) => category.categoryId === params.category),
   );
-  const targetFor = (category: BudgetCategory) =>
-    monthlyTarget(
-      data()?.definitions.find((definition) => definition.id === category.categoryId)?.goalDef,
-    );
-  const underTarget = createMemo(() =>
-    categories().filter((category) => {
-      const target = targetFor(category);
-      return target !== null && category.budgeted < target;
-    }),
-  );
-  const overspent = createMemo(() => categories().filter((category) => category.leftover < 0));
   const visible = createMemo(() =>
-    categories().filter(
-      (category) =>
-        category.categoryName.toLocaleLowerCase().includes(query().trim().toLocaleLowerCase()) &&
-        (filter() === "all" ||
-          (filter() === "overspent"
-            ? category.leftover < 0
-            : (targetFor(category) ?? 0) > category.budgeted)),
+    categories().filter((category) =>
+      category.categoryName.toLocaleLowerCase().includes(query().trim().toLocaleLowerCase()),
     ),
   );
   const grouped = createMemo(() =>
@@ -113,16 +104,57 @@ export default function BudgetPage() {
   const totalAssigned = createMemo(() =>
     categories().reduce((sum, category) => sum + category.budgeted, 0),
   );
-  const totalSpent = createMemo(() =>
-    categories().reduce((sum, category) => sum + Math.max(0, -category.spent), 0),
-  );
-  const totalAvailable = createMemo(() =>
-    categories().reduce((sum, category) => sum + category.leftover, 0),
-  );
+  async function copyLastMonth() {
+    const budget = data();
+    const last = previous();
+    if (!budget || !last || busy() || assignment().state === "saving") return;
+    const rows = monthlyPlan(
+      budget.budget.categories,
+      budget.definitions,
+      last.categories,
+      "previous",
+    );
+    if (!rows.length) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await dispatch(
+        "set_budget_plan",
+        {
+          month: month(),
+          assignments: rows.map((row) => ({
+            categoryId: row.category.categoryId,
+            amount: row.target,
+          })),
+        },
+        {
+          undoInfo: {
+            label: "Budget copied from last month",
+            inverse: {
+              commandType: "set_budget_plan",
+              payload: {
+                month: month(),
+                assignments: rows.map((row) => ({
+                  categoryId: row.category.categoryId,
+                  amount: row.category.budgeted,
+                })),
+              },
+            },
+          },
+        },
+      ).promise;
+      emitMoneyDataChanged();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not copy last month");
+    } finally {
+      setBusy(false);
+    }
+  }
   function moveMonth(offset: number) {
     if (busy() || assignment().state === "saving") return;
     const next = shiftMonth(month(), offset);
     setAssignment({ state: "idle" });
+    setRevealed(null);
     setError(null);
     setParams({ month: next, category: undefined });
   }
@@ -159,18 +191,6 @@ export default function BudgetPage() {
         previous,
         error: caught instanceof Error ? caught.message : "Could not save",
       });
-    }
-  }
-  async function copyPrevious() {
-    setBusy(true);
-    setError(null);
-    try {
-      await dispatch("copy_previous_month", { month: month() }).promise;
-      emitMoneyDataChanged();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not copy last month");
-    } finally {
-      setBusy(false);
     }
   }
   async function createCategory(event: SubmitEvent) {
@@ -241,14 +261,6 @@ export default function BudgetPage() {
         <h1 class="page-title">Budget</h1>
         <div class="page-actions">
           <button
-            class="btn btn-secondary"
-            onClick={() => setMoving(true)}
-            disabled={!categories().length || dataResult.loading || busy()}
-          >
-            <MoneyIcon name="move" />
-            Move money
-          </button>
-          <button
             class="btn btn-primary"
             onClick={() => {
               setError(null);
@@ -301,54 +313,10 @@ export default function BudgetPage() {
         }}
       >
         <div class="plan-summary">
-          <div
-            class="plan-to-assign"
-            classList={{ "is-negative": (data()?.budget.toBudget ?? 0) < 0 }}
-          >
-            <span class="metric-label">
-              {(data()?.budget.toBudget ?? 0) < 0 ? "Overassigned" : "To assign"}
-            </span>
-            <strong class={privacy().blurClass()}>
-              {fmt().formatCents(Math.abs(data()?.budget.toBudget ?? 0))}
-            </strong>
-            <Show when={(data()?.budget.toBudget ?? 0) === 0}>
-              <span class="assigned-check">
-                <MoneyIcon name="check" size={15} />
-                All assigned
-              </span>
-            </Show>
-          </div>
-          <div>
-            <span class="metric-label">Assigned</span>
-            <strong class={privacy().blurClass()}>{fmt().formatCents(totalAssigned())}</strong>
-          </div>
-          <div>
-            <span class="metric-label">Spent</span>
-            <strong class={privacy().blurClass()}>{fmt().formatCents(totalSpent())}</strong>
-          </div>
-          <div>
-            <span class="metric-label">Available</span>
-            <strong class={privacy().blurClass()}>{fmt().formatCents(totalAvailable())}</strong>
-          </div>
+          <span class="metric-label">Monthly budget</span>
+          <strong class={privacy().blurClass()}>{fmt().formatCents(totalAssigned())}</strong>
         </div>
         <div class="plan-tools">
-          <div class="filter-chips">
-            <button classList={{ active: filter() === "all" }} onClick={() => setFilter("all")}>
-              All
-            </button>
-            <button
-              classList={{ active: filter() === "overspent" }}
-              onClick={() => setFilter("overspent")}
-            >
-              Overspent <span>{overspent().length}</span>
-            </button>
-            <button
-              classList={{ active: filter() === "target" }}
-              onClick={() => setFilter("target")}
-            >
-              Under target <span>{underTarget().length}</span>
-            </button>
-          </div>
           <div class="plan-tool-actions">
             <label class="compact-search">
               <MoneyIcon name="search" size={17} />
@@ -366,12 +334,16 @@ export default function BudgetPage() {
               </summary>
               <div class="entity-menu-popover">
                 <button
-                  onClick={() => {
-                    void copyPrevious();
-                  }}
-                  disabled={busy()}
+                  onClick={() => void copyLastMonth()}
+                  disabled={busy() || !previous() || assignment().state === "saving"}
                 >
-                  Fill from last month
+                  Copy last month
+                </button>
+                <button onClick={() => setPlanning(true)} disabled={busy()}>
+                  Fund targets
+                </button>
+                <button onClick={() => setMoving(true)} disabled={!categories().length || busy()}>
+                  Move money
                 </button>
                 <button
                   onClick={() => {
@@ -387,6 +359,19 @@ export default function BudgetPage() {
             </details>
           </div>
         </div>
+        <Show when={previousResult.loading}>
+          <div class="plan-comparison-state" role="status">
+            Loading last month…
+          </div>
+        </Show>
+        <Show when={requestError(previousResult())}>
+          <div class="assignment-error" role="alert">
+            <span>Last month couldn’t be loaded.</span>
+            <button class="btn btn-secondary btn-sm" onClick={() => void refetchPrevious()}>
+              Retry comparison
+            </button>
+          </div>
+        </Show>
         <Show when={error() && !newCategory() && !buffering()}>
           <p class="form-error" role="alert">
             {error()}
@@ -410,7 +395,7 @@ export default function BudgetPage() {
           fallback={
             <div class="first-step">
               <MoneyIcon name="budget" size={36} />
-              <h2>Start with a category.</h2>
+              <h2>No categories yet</h2>
               <button class="btn btn-primary" onClick={() => setNewCategory(true)}>
                 <MoneyIcon name="plus" />
                 Add category
@@ -420,22 +405,12 @@ export default function BudgetPage() {
         >
           <Show
             when={visible().length}
-            fallback={
-              <p class="quiet-empty">
-                {filter() === "overspent"
-                  ? "No overspending"
-                  : filter() === "target"
-                    ? "No targets need funding"
-                    : "No matching categories"}
-              </p>
-            }
+            fallback={<p class="quiet-empty">No matching categories</p>}
           >
             <div class="plan-table">
               <div class="plan-table-header">
                 <span>Category</span>
-                <span>Assigned</span>
-                <span>Spent</span>
-                <span>Available</span>
+                <span>Budget</span>
               </div>
               <For each={grouped()}>
                 {(group) => (
@@ -444,91 +419,104 @@ export default function BudgetPage() {
                       <h3>{group.name}</h3>
                       <strong class={privacy().blurClass()}>
                         {fmt().formatCents(
-                          group.rows.reduce((sum, category) => sum + category.leftover, 0),
+                          group.rows.reduce((sum, category) => sum + category.budgeted, 0),
                         )}
                       </strong>
                     </div>
                     <For each={group.rows}>
-                      {(category) => (
-                        <div class="plan-row">
-                          <button
-                            class="plan-category"
-                            onClick={() => setParams({ category: category.categoryId })}
-                          >
-                            <span class="plan-category-label">
-                              <CategoryBadge
-                                name={category.categoryName}
-                                icon={
-                                  data()?.definitions.find(
-                                    (definition) => definition.id === category.categoryId,
-                                  )?.icon
-                                }
-                                small
-                              />
-                              <span>{category.categoryName}</span>
-                            </span>
-                            <Show when={targetFor(category)}>
-                              {(target) => (
-                                <span class="target-line">
-                                  <span class="target-track">
-                                    <span
-                                      style={{
-                                        width: `${Math.min(100, Math.max(0, (category.budgeted / target()) * 100))}%`,
-                                      }}
-                                    />
-                                  </span>
-                                  <Show
-                                    when={category.budgeted < target()}
-                                    fallback={<MoneyIcon name="check" size={12} />}
-                                  >
-                                    <small class={privacy().blurClass()}>
-                                      {fmt().formatCents(Math.max(0, target() - category.budgeted))}{" "}
-                                      to target
-                                    </small>
-                                  </Show>
+                      {(category) => {
+                        const last = () =>
+                          previous()?.categories.find(
+                            (row) =>
+                              row.categoryId === category.categoryId &&
+                              (row.budgeted !== 0 || row.spent !== 0),
+                          );
+                        return (
+                          <div class="plan-row">
+                            <div class="plan-category-cell">
+                              <button
+                                class="plan-category"
+                                onClick={() => setParams({ category: category.categoryId })}
+                              >
+                                <span class="plan-category-label">
+                                  <CategoryBadge
+                                    name={category.categoryName}
+                                    icon={
+                                      data()?.definitions.find(
+                                        (definition) => definition.id === category.categoryId,
+                                      )?.icon
+                                    }
+                                    small
+                                  />
+                                  <span>{category.categoryName}</span>
                                 </span>
+                              </button>
+                              <Show when={last()}>
+                                <button
+                                  type="button"
+                                  class="plan-history-toggle"
+                                  aria-label={
+                                    (revealed() === category.categoryId ? "Hide" : "Show") +
+                                    " last month for " +
+                                    category.categoryName
+                                  }
+                                  aria-expanded={revealed() === category.categoryId}
+                                  aria-controls={"history-" + category.categoryId}
+                                  onClick={() =>
+                                    setRevealed((id) =>
+                                      id === category.categoryId ? null : category.categoryId,
+                                    )
+                                  }
+                                >
+                                  <MoneyIcon name="chevron" size={14} />
+                                </button>
+                              </Show>
+                            </div>
+                            <label class="plan-assigned">
+                              <span class="mobile-column-label">Budget</span>
+                              <input
+                                aria-label={`Budget for ${category.categoryName}`}
+                                type="text"
+                                inputmode={fmt().inputMode}
+                                class={privacy().blurClass()}
+                                value={fmt().formatCentsInput(category.budgeted)}
+                                disabled={assignment().state === "saving" || busy()}
+                                onBlur={(event) => {
+                                  void assign(
+                                    category.categoryId,
+                                    fmt().parseInput(event.currentTarget.value),
+                                    category.budgeted,
+                                  );
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") event.currentTarget.blur();
+                                }}
+                              />
+                            </label>
+                            <Show when={revealed() === category.categoryId && last()}>
+                              {(previousCategory) => (
+                                <BudgetReference
+                                  id={"history-" + category.categoryId}
+                                  month={previousMonth()}
+                                  category={previousCategory()}
+                                  disabled={
+                                    busy() ||
+                                    assignment().state === "saving" ||
+                                    category.budgeted === previousCategory().budgeted
+                                  }
+                                  onCopy={() =>
+                                    void assign(
+                                      category.categoryId,
+                                      previousCategory().budgeted,
+                                      category.budgeted,
+                                    )
+                                  }
+                                />
                               )}
                             </Show>
-                          </button>
-                          <label class="plan-assigned">
-                            <span class="mobile-column-label">Assigned</span>
-                            <input
-                              aria-label={`Assigned to ${category.categoryName}`}
-                              type="text"
-                              inputmode={fmt().inputMode}
-                              class={privacy().blurClass()}
-                              value={fmt().formatCentsInput(category.budgeted)}
-                              disabled={assignment().state === "saving" || busy()}
-                              onBlur={(event) => {
-                                void assign(
-                                  category.categoryId,
-                                  fmt().parseInput(event.currentTarget.value),
-                                  category.budgeted,
-                                );
-                              }}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter") event.currentTarget.blur();
-                              }}
-                            />
-                          </label>
-                          <span class={`plan-spent ${privacy().blurClass()}`}>
-                            <span class="mobile-column-label">Spent</span>
-                            {fmt().formatCents(Math.max(0, -category.spent))}
-                          </span>
-                          <button
-                            class={`plan-available ${privacy().blurClass()}`}
-                            classList={{
-                              "is-overspent": category.leftover < 0,
-                              "is-empty": category.leftover === 0,
-                            }}
-                            aria-label={`${category.categoryName} available: ${fmt().formatCents(category.leftover)}`}
-                            onClick={() => setParams({ category: category.categoryId })}
-                          >
-                            <span class="mobile-column-label">Available</span>
-                            {fmt().formatCents(category.leftover)}
-                          </button>
-                        </div>
-                      )}
+                          </div>
+                        );
+                      }}
                     </For>
                   </section>
                 )}
@@ -538,16 +526,6 @@ export default function BudgetPage() {
                 <strong class={privacy().blurClass()}>
                   {fmt().formatCents(
                     visible().reduce((sum, category) => sum + category.budgeted, 0),
-                  )}
-                </strong>
-                <strong class={privacy().blurClass()}>
-                  {fmt().formatCents(
-                    visible().reduce((sum, category) => sum + Math.max(0, -category.spent), 0),
-                  )}
-                </strong>
-                <strong class={privacy().blurClass()}>
-                  {fmt().formatCents(
-                    visible().reduce((sum, category) => sum + category.leftover, 0),
                   )}
                 </strong>
               </div>
@@ -584,6 +562,14 @@ export default function BudgetPage() {
             onClose={() => setParams({ category: undefined })}
           />
         )}
+      </Show>
+      <Show when={planning()}>
+        <MonthlyPlanDialog
+          month={month()}
+          budget={data()!.budget}
+          definitions={data()!.definitions}
+          onClose={() => setPlanning(false)}
+        />
       </Show>
       <Show when={moving()}>
         <MoveMoneyDialog

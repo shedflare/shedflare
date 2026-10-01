@@ -1,30 +1,15 @@
-import { parseAmountInput } from "./money-amount";
-
-/**
- * CSV Parser — ported from Actual Budget (MIT)
- * https://github.com/actualbudget/actual
- * Original copyright: James Long and contributors
- *
- * Parses CSV bank export files into structured transaction data.
- * Handles various formats: auto-detect delimiter, header row, date formats,
- * amount columns (including IN/OUT split columns).
- */
-
+import { parseAmountInput, type CurrencyCode, type NumberFormat } from "./money-amount";
+import { parseCalendarDate } from "./types";
+export const CSV_IMPORT_MAX_ROWS = 200;
 export interface CsvRow {
   date: string;
   amount: number;
   payee?: string;
   notes?: string;
   category?: string;
+  account?: string;
   importedDescription?: string;
 }
-
-export interface CsvImportResult {
-  rows: CsvRow[];
-  errors: string[];
-  detectedFields: CsvFieldMap;
-}
-
 export interface CsvFieldMap {
   date: string;
   amount: string;
@@ -33,321 +18,268 @@ export interface CsvFieldMap {
   in?: string;
   out?: string;
   description?: string;
+  category?: string;
+  account?: string;
+}
+export interface CsvImportResult {
+  rows: CsvRow[];
+  errors: string[];
+  detectedFields: CsvFieldMap;
+  headers: string[];
+}
+export interface CsvOptions {
+  currency?: CurrencyCode;
+  numberFormat?: NumberFormat;
+  dateFormat?: "dmy" | "mdy";
 }
 
-/**
- * Detect the delimiter used in a CSV text.
- */
-function detectDelimiter(text: string): string {
-  const firstLine = text.split("\n")[0] ?? "";
-  const commaCount = (firstLine.match(/,/g) ?? []).length;
-  const tabCount = (firstLine.match(/\t/g) ?? []).length;
-  const semicolonCount = (firstLine.match(/;/g) ?? []).length;
-
-  if (tabCount > commaCount && tabCount > semicolonCount) return "\t";
-  if (semicolonCount > commaCount && semicolonCount > tabCount) return ";";
-  return ",";
-}
-
-/**
- * Try to detect which columns are which by matching header names to known patterns.
- */
-function detectFieldMap(headers: string[]): CsvFieldMap {
-  const map: CsvFieldMap = { date: "", amount: "" };
-  const lower = headers.map((h) => h.toLowerCase().trim());
-
-  for (let i = 0; i < lower.length; i++) {
-    const h = lower[i]!;
-
-    // Date
-    if (/^(date|tanggal|tgl|posted|posting|trans.?date|transaction.?date)$/.test(h)) {
-      map.date = headers[i]!;
+// Read records rather than lines: quoted descriptions and notes may contain newlines.
+function records(text: string, delimiter: string): string[][] {
+  const result: string[][] = [];
+  let row: string[] = [],
+    value = "",
+    quoted = false,
+    closed = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (quoted) {
+      if (char === '"') {
+        if (text[i + 1] === '"') {
+          value += '"';
+          i++;
+        } else {
+          quoted = false;
+          closed = true;
+        }
+      } else value += char;
       continue;
     }
-
-    // Amount (single column)
-    if (/^(amount|jumlah|nominal|value|sum|betrag|ammount)$/.test(h)) {
-      map.amount = headers[i]!;
-      continue;
-    }
-
-    // IN/OUT split columns (common in Indonesian bank CSVs)
-    if (/^(debit|dk|keluar|out|withdrawal|betaling|payment)$/.test(h)) {
-      map.out = headers[i]!;
-      continue;
-    }
-    if (/^(credit|cr|masuk|in|deposit|storting|income)$/.test(h)) {
-      map.in = headers[i]!;
-      continue;
-    }
-
-    // Payee
-    if (
-      /^(payee|merchant|beneficiary|counterparty|name|description|desc|narasi|keterangan|recipient|party)$/.test(
-        h,
-      )
-    ) {
-      map.payee = headers[i]!;
-      continue;
-    }
-
-    // Notes / memo
-    if (/^(notes|memo|note|catatan|remark|reference|ref)$/.test(h)) {
-      map.notes = headers[i]!;
-      continue;
-    }
-
-    // Full description (may contain both payee and notes)
-    if (/^(description|desc|narasi|keterangan|details|detail|memo)$/.test(h)) {
-      map.description = headers[i]!;
-      continue;
+    if (char === '"') {
+      if (value.trim() || closed) throw Error("Unexpected quote in CSV");
+      value = "";
+      quoted = true;
+    } else if (char === delimiter) {
+      row.push(value);
+      value = "";
+      closed = false;
+    } else if (char === "\n" || char === "\r") {
+      if (char === "\r" && text[i + 1] === "\n") i++;
+      row.push(value);
+      if (row.some((cell) => cell.trim())) result.push(row);
+      row = [];
+      value = "";
+      closed = false;
+    } else {
+      if (closed && char.trim()) throw Error("Unexpected text after a quoted field");
+      if (!closed) value += char;
     }
   }
-
+  if (quoted) throw Error("Unclosed quoted field");
+  row.push(value);
+  if (row.some((cell) => cell.trim())) result.push(row);
+  return result;
+}
+function delimiter(text: string): string {
+  const first = text.split(/\r?\n/)[0] ?? "";
+  let winner = ",",
+    width = 0;
+  for (const candidate of [",", ";", "\t"]) {
+    try {
+      const count = records(first, candidate)[0]?.length ?? 0;
+      if (count > width) {
+        winner = candidate;
+        width = count;
+      }
+    } catch {}
+  }
+  return winner;
+}
+function detect(headers: string[]): CsvFieldMap {
+  const map: CsvFieldMap = { date: "", amount: "" };
+  for (const header of headers) {
+    const h = header.toLowerCase().trim();
+    if (/^(date|tanggal|tgl|posted|posting|trans.?date|transaction.?date)$/.test(h))
+      map.date = header;
+    else if (/^(amount|jumlah|nominal|value|sum|betrag|ammount)$/.test(h)) map.amount = header;
+    else if (/^(debit|debet|dk|keluar|out|withdrawal|payment)$/.test(h)) map.out = header;
+    else if (/^(credit|kredit|cr|masuk|in|deposit|income)$/.test(h)) map.in = header;
+    else if (/^(payee|merchant|beneficiary|counterparty|name|recipient|party)$/.test(h))
+      map.payee = header;
+    else if (/^(notes|memo|note|catatan|remark|reference|ref)$/.test(h)) map.notes = header;
+    else if (/^(description|desc|narasi|keterangan|details|detail)$/.test(h))
+      map.description = header;
+    else if (/^(category|kategori)$/.test(h)) map.category = header;
+    else if (/^(account|rekening|akun)$/.test(h)) map.account = header;
+  }
   return map;
 }
-
-/**
- * Try to parse a date string in various formats.
- * Returns YYYY-MM-DD or null.
- */
-function parseDate(value: string): string | null {
-  const trimmed = value.trim();
-
-  // YYYY-MM-DD
-  const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (isoMatch) {
-    const [, y, m, d] = isoMatch;
-    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+function dateValue(value: string, format: CsvOptions["dateFormat"]): string | null {
+  let normalized = value.trim();
+  const slash = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(normalized);
+  if (slash) {
+    const [, a, b, y] = slash;
+    normalized =
+      format === "mdy"
+        ? y + "-" + a.padStart(2, "0") + "-" + b.padStart(2, "0")
+        : y + "-" + b.padStart(2, "0") + "-" + a.padStart(2, "0");
   }
-
-  // DD/MM/YYYY or DD-MM-YYYY
-  const dmyMatch = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-  if (dmyMatch) {
-    const [, d, m, y] = dmyMatch;
-    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  const compact = /^(\d{4})(\d{2})(\d{2})$/.exec(normalized);
+  if (compact) normalized = compact[1] + "-" + compact[2] + "-" + compact[3];
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(normalized);
+  if (iso) normalized = iso[1] + "-" + iso[2].padStart(2, "0") + "-" + iso[3].padStart(2, "0");
+  const named = /^(\w+)\s+(\d{1,2}),?\s*(\d{4})$/.exec(normalized);
+  if (named) {
+    const index = [
+      "jan",
+      "feb",
+      "mar",
+      "apr",
+      "may",
+      "jun",
+      "jul",
+      "aug",
+      "sep",
+      "oct",
+      "nov",
+      "dec",
+    ].indexOf(named[1].slice(0, 3).toLowerCase());
+    if (index >= 0)
+      normalized =
+        named[3] + "-" + String(index + 1).padStart(2, "0") + "-" + named[2].padStart(2, "0");
   }
-
-  // MM/DD/YYYY or MM-DD-YYYY
-  const mdyMatch = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-  if (mdyMatch) {
-    const [, m, d, y] = mdyMatch;
-    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
-  }
-
-  // Mon DD, YYYY or DD Mon YYYY
-  const textMatch = trimmed.match(/^(\w+)\s+(\d{1,2}),?\s*(\d{4})$/);
-  if (textMatch) {
-    const months = new Map<string, string>(
-      Object.entries({
-        jan: "01",
-        feb: "02",
-        mar: "03",
-        apr: "04",
-        may: "05",
-        jun: "06",
-        jul: "07",
-        aug: "08",
-        sep: "09",
-        oct: "10",
-        nov: "11",
-        dec: "12",
-      }),
-    );
-    const monthStr = textMatch[1]!.toLowerCase().slice(0, 3);
-    const month = months.get(monthStr);
-    if (month) {
-      return `${textMatch[3]}-${month}-${textMatch[2]!.padStart(2, "0")}`;
-    }
-  }
-
-  // YYYYMMDD (no separators)
-  const yyyymmdd = trimmed.match(/^(\d{4})(\d{2})(\d{2})$/);
-  if (yyyymmdd) {
-    return `${yyyymmdd[1]}-${yyyymmdd[2]}-${yyyymmdd[3]}`;
-  }
-
-  return null;
+  return parseCalendarDate(normalized) ? normalized : null;
 }
-
-/**
- * Parse a numeric amount string to cents (integer).
- * Handles "1,234.56", "1.234,56", "(1,234.56)" (parentheses = negative).
- */
-function parseAmount(value: string): number | null {
-  const trimmed = value.trim();
-
-  if (!trimmed) return null;
-
+function amountValue(value: string, options: CsvOptions): number | null {
+  let clean = value.trim();
+  if (!clean) return null;
   let negative = false;
-  let clean = trimmed;
-
-  // Handle parentheses for negative
   if (clean.startsWith("(") && clean.endsWith(")")) {
     negative = true;
-    clean = clean.slice(1, -1);
+    clean = clean.slice(1, -1).trim();
   }
-
-  // Handle leading minus
   if (clean.startsWith("-")) {
     negative = true;
-    clean = clean.slice(1);
-  }
-
-  const rupiah = /^(?:Rp\.?|IDR)/i.test(clean.trim());
-  clean = clean.trim().replace(/^(?:Rp\.?|IDR|USD|[$€£])\s*/i, "");
-  // A trailing comma decimal or dot-grouped whole amount uses Indonesian separators.
+    clean = clean.slice(1).trim();
+  } else if (clean.startsWith("+")) clean = clean.slice(1).trim();
+  const currency = /^(?:Rp\.?|IDR)/i.test(clean) ? "IDR" : (options.currency ?? "USD");
+  clean = clean.replace(/^(?:Rp\.?|IDR|USD|[$€£])\s*/i, "");
   const commaDecimal =
     clean.lastIndexOf(",") > clean.lastIndexOf(".") && !/^\d{1,3}(?:,\d{3})+$/.test(clean);
-  const dotGroups = /^\d{1,3}(?:\.\d{3})+$/.test(clean);
-  const amount = parseAmountInput(
-    clean,
-    rupiah ? "IDR" : "USD",
-    commaDecimal || dotGroups ? "dot-comma" : "comma-dot",
-  );
-  if (!Number.isSafeInteger(amount)) return null;
-  return negative ? -amount : amount;
+  const dots = /^\d{1,3}(?:\.\d{3})+$/.test(clean);
+  const format =
+    options.numberFormat ??
+    (commaDecimal || dots ? "dot-comma" : /\d \d/.test(clean) ? "space-dot" : "comma-dot");
+  const amount = parseAmountInput(clean, currency, format);
+  return Number.isSafeInteger(amount) ? (negative ? -amount : amount) : null;
 }
-
-/**
- * Split a CSV line into fields, respecting quoted values.
- */
-function splitLine(line: string, delimiter: string): string[] {
-  const fields: string[] = [];
-  let current = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i]!;
-
-    if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-      continue;
-    }
-
-    if (char === delimiter && !inQuotes) {
-      fields.push(current.trim());
-      current = "";
-      continue;
-    }
-
-    current += char;
+export function parseCsv(
+  text: string,
+  fieldMap?: CsvFieldMap,
+  options: CsvOptions = {},
+): CsvImportResult {
+  const empty: CsvImportResult = {
+    rows: [],
+    errors: [],
+    detectedFields: { date: "", amount: "" },
+    headers: [],
+  };
+  let parsed: string[][];
+  try {
+    const clean = text.replace(/^\uFEFF/, "");
+    parsed = records(clean, delimiter(clean));
+  } catch (error) {
+    return { ...empty, errors: [error instanceof Error ? error.message : "Invalid CSV"] };
   }
-
-  fields.push(current.trim());
-  return fields;
-}
-
-/**
- * Main entry point: parse a CSV string into structured rows.
- */
-export function parseCsv(text: string, fieldMap?: CsvFieldMap): CsvImportResult {
-  const errors: string[] = [];
-  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
-
-  if (lines.length === 0) {
-    return { rows: [], errors: ["Empty CSV"], detectedFields: { date: "", amount: "" } };
-  }
-
-  const delimiter = detectDelimiter(text);
-  const headers = splitLine(lines[0]!, delimiter);
-  const map = fieldMap ?? detectFieldMap(headers);
-  const headerIndex = new Map(headers.map((h, i) => [h.trim(), i]));
-
-  const dateIdx = map.date ? headerIndex.get(map.date) : -1;
-  const amountIdx = map.amount ? headerIndex.get(map.amount) : -1;
-  const payeeIdx = map.payee ? headerIndex.get(map.payee) : -1;
-  const notesIdx = map.notes ? headerIndex.get(map.notes) : -1;
-  const inIdx = map.in ? headerIndex.get(map.in) : -1;
-  const outIdx = map.out ? headerIndex.get(map.out) : -1;
-  const descIdx = map.description ? headerIndex.get(map.description) : -1;
-
-  if (dateIdx === undefined || dateIdx < 0) {
-    return { rows: [], errors: ["Could not detect date column"], detectedFields: map };
-  }
-
-  const rows: CsvRow[] = [];
-  const dataLines = lines.slice(1); // skip header
-
-  for (let lineIdx = 0; lineIdx < dataLines.length; lineIdx++) {
-    const line = dataLines[lineIdx]!;
-    const fields = splitLine(line, delimiter);
-
-    const getField = (idx: number | undefined): string | undefined => {
-      if (idx === undefined || idx < 0 || idx >= fields.length) return undefined;
-      return fields[idx];
+  if (!parsed.length) return { ...empty, errors: ["Empty CSV"] };
+  const headers = parsed[0].map((h) => h.trim());
+  const map = fieldMap ?? detect(headers);
+  const errors: string[] = [],
+    rows: CsvRow[] = [];
+  if (new Set(headers).size !== headers.length || headers.some((h) => !h))
+    return {
+      ...empty,
+      headers,
+      detectedFields: map,
+      errors: ["Choose a CSV with distinct column headings"],
     };
-
-    // Date
-    const rawDate = getField(dateIdx);
-    if (!rawDate) {
-      errors.push(`Line ${lineIdx + 2}: missing date`);
+  const mapped = (name?: string) => !!name && headers.includes(name);
+  if (!mapped(map.date)) errors.push("Choose the date column");
+  if (!mapped(map.amount) && !mapped(map.in) && !mapped(map.out))
+    errors.push("Choose an amount column or money in/out columns");
+  if (errors.length) return { rows, errors, headers, detectedFields: map };
+  for (const [index, fields] of parsed.slice(1).entries()) {
+    const fail = (message: string) => errors.push("Row " + (index + 2) + ": " + message);
+    if (fields.length !== headers.length) {
+      fail("column count does not match");
       continue;
     }
-    const date = parseDate(rawDate);
+    const get = (name?: string) => (name ? (fields[headers.indexOf(name)] ?? "") : "");
+    const date = dateValue(get(map.date), options.dateFormat);
     if (!date) {
-      errors.push(`Line ${lineIdx + 2}: could not parse date "${rawDate}"`);
+      fail("invalid date");
       continue;
     }
-
-    // Amount
-    let amount: number | null = null;
-
-    if (amountIdx !== undefined && amountIdx >= 0) {
-      const rawAmount = getField(amountIdx);
-      if (rawAmount) amount = parseAmount(rawAmount);
+    let amount: number | null;
+    if (mapped(map.amount)) amount = amountValue(get(map.amount), options);
+    else {
+      const incoming = get(map.in).trim() ? amountValue(get(map.in), options) : 0;
+      const outgoing = get(map.out).trim() ? amountValue(get(map.out), options) : 0;
+      amount =
+        incoming === null ||
+        outgoing === null ||
+        incoming < 0 ||
+        outgoing < 0 ||
+        (incoming > 0 && outgoing > 0)
+          ? null
+          : incoming - outgoing;
     }
-
-    // Handle IN/OUT split columns
-    if (amount === null && (inIdx !== undefined || outIdx !== undefined)) {
-      const inVal = inIdx !== undefined ? getField(inIdx) : undefined;
-      const outVal = outIdx !== undefined ? getField(outIdx) : undefined;
-
-      if (inVal && parseAmount(inVal) !== null && parseAmount(inVal)! > 0) {
-        amount = parseAmount(inVal);
-      } else if (outVal && parseAmount(outVal) !== null && parseAmount(outVal)! > 0) {
-        amount = parseAmount(outVal);
-        if (amount !== null) amount = -amount; // outflows are negative
-      }
-    }
-
     if (amount === null) {
-      errors.push(`Line ${lineIdx + 2}: could not parse amount`);
+      fail("invalid amount");
       continue;
     }
-
-    // Payee / description
-    let payee = payeeIdx !== undefined ? getField(payeeIdx) : undefined;
-    const description = descIdx !== undefined ? getField(descIdx) : undefined;
-
-    // If no payee column but we have a description column, use description
-    if (!payee && description) {
-      payee = description.split(/[|\n]/)[0]?.trim();
-    }
-
-    // Notes
-    let notes = notesIdx !== undefined ? getField(notesIdx) : undefined;
-    if (!notes && description && payee) {
-      // If description has more content after the payee part, use as notes
-      const descParts = description.split(/[|\n]/);
-      if (descParts.length > 1) {
-        notes = descParts.slice(1).join(" | ").trim();
-      }
-    }
-
+    const description = get(map.description).trim();
+    const payee = get(map.payee).trim() || description.split(/[|\n]/)[0]?.trim();
+    const notes =
+      get(map.notes) ||
+      (description.includes("|") ? description.split("|").slice(1).join(" | ").trim() : "");
     rows.push({
       date,
       amount,
-      payee: payee?.trim() || undefined,
-      notes: notes?.trim() || undefined,
-      importedDescription: description?.trim() || undefined,
+      payee: payee || undefined,
+      notes: notes || undefined,
+      category: get(map.category).trim() || undefined,
+      account: get(map.account).trim() || undefined,
+      importedDescription: description || undefined,
     });
   }
-
-  return { rows, errors, detectedFields: map };
+  return { rows, errors, headers, detectedFields: map };
+}
+export interface DuplicateRow {
+  date: string;
+  amount: number;
+  payee?: string | null;
+}
+export function importRowKey(row: DuplicateRow): string {
+  return JSON.stringify([row.date, row.amount, row.payee?.trim().toLocaleLowerCase() ?? ""]);
+}
+// Consume matches one at a time so two identical legitimate purchases stay two purchases.
+export function duplicateRows(
+  rows: readonly CsvRow[],
+  existing: readonly DuplicateRow[],
+): Set<number> {
+  const counts = new Map<string, number>();
+  for (const row of existing) {
+    const key = importRowKey(row);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const result = new Set<number>();
+  for (const [index, row] of rows.entries()) {
+    const key = importRowKey(row),
+      count = counts.get(key) ?? 0;
+    if (count > 0) {
+      result.add(index);
+      counts.set(key, count - 1);
+    }
+  }
+  return result;
 }

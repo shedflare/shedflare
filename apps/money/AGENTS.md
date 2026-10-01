@@ -10,8 +10,8 @@ See root [CONTEXT.md](../../CONTEXT.md). `src/lib/api.ts` calls the API;
 routes validated commands. Keep client contracts derived from those schemas.
 
 For import, reconciliation, split, transfer, and undo changes, verify persisted state after success,
-failure, and retry. The shared D1 shim is SQLite-backed but its current `batch` does not execute
-statements or model rollback; use a faithful runtime boundary for transaction guarantees.
+failure, and retry. The shared D1 shim is SQLite-backed; its `batch` executes all statements in
+a transaction and rolls back failed batches. Exercise that boundary for transaction guarantees.
 
 - Shared Shedflare dependencies must use `workspace:*`. Never commit `file:`, `link:`, sibling
   source paths, nested lockfiles, or app-local copies of root tooling.

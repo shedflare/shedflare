@@ -3,6 +3,7 @@ import { redoStack, undoStack, push, undo, redo, historyBusy } from "./undo-stac
 import * as Schema from "effect/Schema";
 
 interface MockCommandData {
+  transactionId?: string;
   id?: string;
 }
 const RequestBodySchema = Schema.Struct({ commandType: Schema.String, payload: Schema.Unknown });
@@ -34,6 +35,36 @@ function fetchBody() {
 }
 
 describe("undo-stack", () => {
+  test("recording a payment can undo again after redo creates a different transaction", async () => {
+    push(
+      "Payment recorded",
+      { commandType: "post_schedule_transaction", payload: { scheduleId: "payment" } },
+      {
+        commandType: "undo_schedule_payment",
+        payload: {
+          scheduleId: "payment",
+          transactionId: "original",
+          nextDate: "2026-10-01",
+          completed: false,
+          recurrenceRules: "monthly",
+        },
+      },
+    );
+    mockFetchOk();
+    expect(await undo()).toBe(true);
+    mockFetchOk({ id: "payment", transactionId: "recreated-payment" });
+    expect(await redo()).toBe(true);
+    mockFetchOk();
+    expect(await undo()).toBe(true);
+    expect(fetchBody()).toMatchObject({
+      commandType: "undo_schedule_payment",
+      payload: {
+        scheduleId: "payment",
+        transactionId: "recreated-payment",
+        nextDate: "2026-10-01",
+      },
+    });
+  });
   test("connection failures preserve undo and redo for retry, including recreated transaction IDs", async () => {
     push(
       "Add expense",

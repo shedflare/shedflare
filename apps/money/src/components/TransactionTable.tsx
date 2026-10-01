@@ -2,6 +2,8 @@ import { createSignal, createMemo, createEffect, For, Show, onCleanup } from "so
 import { useNavigate } from "@solidjs/router";
 import { dispatch } from "../lib/pending-ops";
 import { api } from "../lib/api";
+import { accountLedger } from "../lib/account-view";
+import { emitMoneyDataChanged } from "../lib/data-events";
 import { useCurrency } from "../lib/currency";
 import { usePrivacyMode } from "../lib/privacy";
 import { useDateFormat } from "../lib/date-format";
@@ -14,6 +16,7 @@ export interface TransactionRow {
   accountId: string;
   accountName?: string;
   date: string;
+  createdAt?: string;
   amount: number;
   payee: string | null;
   categoryId: string | null;
@@ -24,6 +27,7 @@ export interface TransactionRow {
   isParent?: boolean;
   isChild?: boolean;
   parentId?: string | null;
+  transferId?: string | null;
   scheduleId?: string | null;
   scheduleName?: string | null;
   tags?: { id: string; name: string; color: string | null }[];
@@ -112,17 +116,7 @@ export default function TransactionTable(props: TransactionTableProps) {
   const transactionsWithBalance = createMemo(() => {
     if (!props.showBalance)
       return props.transactions.map((transaction) => ({ ...transaction, balance: 0 }));
-    const txs = [...props.transactions].sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-    );
-    const result: Array<TransactionRow & { balance: number }> = [];
-    let balance = props.openingBalance ?? 0;
-    for (const tx of txs) {
-      // Parent holds the full amount; children are category splits only.
-      if (!tx.isChild) balance += tx.amount;
-      result.push({ ...tx, balance });
-    }
-    return result.reverse();
+    return accountLedger(props.transactions, props.openingBalance ?? 0);
   });
 
   function rollbackPatch(tx: TransactionRow, patch: TransactionPatch): TransactionPatch {
@@ -156,13 +150,22 @@ export default function TransactionTable(props: TransactionTableProps) {
       },
     );
     props.onTransactionPatch?.(tx.id, optimisticPatch);
-    void promise.catch((err) => {
-      props.onTransactionPatch?.(tx.id, rollbackPatch(tx, optimisticPatch));
-      console.warn("[TransactionTable] transaction update failed", err);
-    });
+    void promise
+      .then(() => {
+        if (!props.onTransactionPatch) void props.onReload?.();
+      })
+      .catch((err) => {
+        props.onTransactionPatch?.(tx.id, rollbackPatch(tx, optimisticPatch));
+        console.warn("[TransactionTable] transaction update failed", err);
+      });
   }
 
   function startEdit(txId: string, field: TxField) {
+    if (
+      props.transactions.find((row) => row.id === txId)?.transferId &&
+      (field === "date" || field === "amount" || field === "category")
+    )
+      return;
     setEditingId(txId);
     setEditingField(field);
   }
@@ -178,8 +181,8 @@ export default function TransactionTable(props: TransactionTableProps) {
     } = {};
     if ("amount" in fields) oldFields.amount = tx.amount;
     if ("date" in fields) oldFields.date = tx.date;
-    if ("payee" in fields) oldFields.payee = tx.payee ?? undefined;
-    if ("notes" in fields) oldFields.notes = tx.notes ?? undefined;
+    if ("payee" in fields) oldFields.payee = tx.payee;
+    if ("notes" in fields) oldFields.notes = tx.notes;
     if ("categoryId" in fields) oldFields.categoryId = tx.categoryId;
     if ("cleared" in fields) oldFields.cleared = tx.cleared;
     if ("reconciled" in fields) oldFields.reconciled = tx.reconciled;
@@ -203,7 +206,7 @@ export default function TransactionTable(props: TransactionTableProps) {
     } else if (field === "payee") {
       if (value !== (tx.payee ?? "")) {
         const payee = value || null;
-        applyOptimisticPatch(tx, { payee: value || undefined }, { payee }, "Update payee");
+        applyOptimisticPatch(tx, { payee }, { payee }, "Update payee");
         if (value.trim() && !tx.categoryId) {
           void fetchCategorySuggestion(tx, value.trim());
         }
@@ -211,7 +214,7 @@ export default function TransactionTable(props: TransactionTableProps) {
     } else if (field === "notes") {
       if (value !== (tx.notes ?? "")) {
         const notes = value || null;
-        applyOptimisticPatch(tx, { notes: value || undefined }, { notes }, "Update notes");
+        applyOptimisticPatch(tx, { notes }, { notes }, "Update notes");
       }
     } else if (field === "category") {
       const catId = value || null;
@@ -244,7 +247,49 @@ export default function TransactionTable(props: TransactionTableProps) {
     }
   }
 
-  function handleDelete(tx: TransactionRow) {
+  async function handleDelete(tx: TransactionRow) {
+    if (tx.transferId) {
+      try {
+        const data = await api.transactions();
+        const other = data.transactions.find((row) => row.id === tx.transferId);
+        if (!other || other.transferId !== tx.id) throw new Error("The linked transfer is missing");
+        const debit = tx.amount < 0 ? tx : other;
+        const credit = tx.amount < 0 ? other : tx;
+        await dispatch(
+          "delete_account_transfer",
+          { id: tx.id },
+          {
+            undoInfo: {
+              label: "Transfer removed",
+              inverse: {
+                commandType: "create_account_transfer",
+                payload: {
+                  fromAccountId: debit.accountId,
+                  toAccountId: credit.accountId,
+                  amount: -debit.amount,
+                  date: debit.date,
+                  fromPayee: debit.payee,
+                  toPayee: credit.payee,
+                  fromNotes: debit.notes,
+                  toNotes: credit.notes,
+                  fromCleared: debit.cleared,
+                  toCleared: credit.cleared,
+                },
+              },
+            },
+          },
+        ).promise;
+        emitMoneyDataChanged();
+        await props.onReload?.();
+      } catch (caught) {
+        emitOperationFeedback({
+          kind: "error",
+          message: caught instanceof Error ? caught.message : "Could not remove transfer",
+          undoable: false,
+        });
+      }
+      return;
+    }
     const { promise } = dispatch(
       "delete_transaction",
       { id: tx.id },
@@ -476,6 +521,8 @@ export default function TransactionTable(props: TransactionTableProps) {
                       <button
                         type="button"
                         class="tx-inline-trigger"
+                        style={tx.transferId ? { cursor: "default" } : undefined}
+                        disabled={!!tx.transferId}
                         onClick={() => startEdit(tx.id, "date")}
                         aria-label={`Edit date ${df().formatDate(tx.date)}`}
                       >
@@ -565,10 +612,16 @@ export default function TransactionTable(props: TransactionTableProps) {
                         type="button"
                         class="tx-inline-trigger"
                         classList={{ "tx-split-label": tx.isParent }}
+                        style={tx.transferId ? { cursor: "default" } : undefined}
+                        disabled={!!tx.transferId}
                         onClick={() => startEdit(tx.id, "category")}
                         aria-label={`Edit category ${tx.categoryName ?? "Uncategorized"}`}
                       >
-                        {tx.isParent ? "Split" : (tx.categoryName ?? "Uncategorized")}
+                        {tx.isParent
+                          ? "Split"
+                          : tx.transferId
+                            ? "Transfer"
+                            : (tx.categoryName ?? "Uncategorized")}
                       </button>
                     )}
                   </span>
@@ -676,6 +729,8 @@ export default function TransactionTable(props: TransactionTableProps) {
                       <button
                         type="button"
                         class={`tx-inline-trigger tx-amount-trigger ${privacyBlur().blurClass()}`}
+                        style={tx.transferId ? { cursor: "default" } : undefined}
+                        disabled={!!tx.transferId}
                         onClick={() => startEdit(tx.id, "amount")}
                         aria-label={`Edit amount ${formatCents(tx.amount ?? 0)}`}
                       >
@@ -697,14 +752,14 @@ export default function TransactionTable(props: TransactionTableProps) {
                         <button
                           type="button"
                           onClick={() => initSplit(tx)}
-                          disabled={!!tx.isChild || !!tx.isParent}
+                          disabled={!!tx.isChild || !!tx.isParent || !!tx.transferId}
                         >
                           Split transaction
                         </button>
                         <button
                           type="button"
                           onClick={() => props.onCreateSchedule?.(tx)}
-                          disabled={!!tx.isChild || !!tx.isParent}
+                          disabled={!!tx.isChild || !!tx.isParent || !!tx.transferId}
                         >
                           Create schedule
                         </button>

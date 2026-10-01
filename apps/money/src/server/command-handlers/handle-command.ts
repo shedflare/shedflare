@@ -1,3 +1,4 @@
+import { handleSetup } from "./setup";
 import type { Db } from "../d1-access";
 import { decodeCommandInvocation, type CommandInvocation } from "../../domain/commands";
 import { isSyncCommandType, type CommandResult } from "../../domain/types";
@@ -38,6 +39,8 @@ export async function handleCommand(db: Db, body: CommandRequest): Promise<Comma
 
 async function routeCommand(command: CommandInvocation, db: Db): Promise<CommandResult> {
   switch (command.commandType) {
+    case "setup_money":
+      return handleSetup(command, db);
     case "create_account":
     case "update_account":
     case "delete_account":
@@ -45,9 +48,12 @@ async function routeCommand(command: CommandInvocation, db: Db): Promise<Command
     case "reopen_account":
     case "reorder_accounts":
     case "update_exchange_rate":
+    case "reconcile_account":
       return handleAccountCommands(command, db);
 
     case "create_transaction":
+    case "create_account_transfer":
+    case "delete_account_transfer":
     case "update_transaction":
     case "delete_transaction":
     case "split_transaction":
@@ -59,10 +65,13 @@ async function routeCommand(command: CommandInvocation, db: Db): Promise<Command
     case "create_category_group":
     case "update_category_group":
     case "delete_category_group":
+    case "reorder_category_groups":
     case "reorder_categories":
       return handleCategoryCommands(command, db);
 
     case "set_budget_amount":
+    case "allocate_budget":
+    case "set_budget_plan":
     case "set_budget_carryover":
     case "set_buffer":
     case "copy_previous_month":
@@ -86,6 +95,7 @@ async function routeCommand(command: CommandInvocation, db: Db): Promise<Command
     case "delete_schedule":
     case "skip_schedule_date":
     case "post_schedule_transaction":
+    case "undo_schedule_payment":
       return handleScheduleCommands(command, db);
 
     case "create_rule":
@@ -100,6 +110,7 @@ async function routeCommand(command: CommandInvocation, db: Db): Promise<Command
       return handleTagCommands(command, db);
 
     case "import_transactions":
+    case "undo_transaction_import":
       return handleImportCommands(command, db);
 
     case "create_filter":

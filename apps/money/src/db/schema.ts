@@ -262,6 +262,19 @@ export const settings = sqliteTable("settings", {
   updatedAt: text("updated_at").notNull(),
 });
 
+// Import receipts retain original rows for safe retry and exact undo/redo.
+export const transactionImports = sqliteTable("transaction_imports", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id")
+    .notNull()
+    .references(() => accounts.id, { onDelete: "cascade" }),
+  fingerprint: text("fingerprint").notNull(),
+  rows: text("rows").notNull(),
+  skipped: integer("skipped").notNull(),
+  state: text("state", { enum: ["active", "undone"] }).notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
 // ---------------------------------------------------------------------------
 // notes (generic key-value notes for any entity)
 // ---------------------------------------------------------------------------

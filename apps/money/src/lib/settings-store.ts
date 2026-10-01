@@ -44,14 +44,18 @@ function toSettingsMap(response: SettingsResponse) {
 // without waiting for the server fetch.
 const [settingsMap, setSettingsMap] = createSignal<SettingsMap>(readStorage());
 
+export function applySettings(response: SettingsResponse) {
+  const map = toSettingsMap(response);
+  setSettingsMap(map);
+  writeStorage(map);
+  notifyListeners();
+}
+
 export function loadSettings() {
   fetch("/api/settings")
     .then((r) => r.json())
     .then((data) => {
-      const map = toSettingsMap(decodeSettings(data));
-      setSettingsMap(map);
-      writeStorage(map);
-      notifyListeners();
+      applySettings(decodeSettings(data));
     })
     .catch(() => {
       console.warn("[settings-store] failed to load settings");

@@ -431,8 +431,10 @@ export const CommandResponseSchema = Schema.Union([
     ok: Schema.Literal(true),
     data: Schema.Struct({
       id: Schema.optional(Schema.String),
+      transactionId: Schema.optional(Schema.String),
       added: Schema.optional(Schema.Number),
       updated: Schema.optional(Schema.Number),
+      skipped: Schema.optional(Schema.Number),
       errors: Schema.optional(Schema.Array(Schema.String)),
     }),
   }),

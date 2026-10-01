@@ -34,7 +34,7 @@ const PRIMARY_NAV: NavItem[] = [
   { path: "/accounts", label: "Accounts", icon: "accounts" },
   {
     path: "/schedules",
-    label: "Scheduled",
+    label: "Recurring",
     icon: "calendar",
     activePaths: ["/schedules"],
   },

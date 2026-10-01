@@ -4,7 +4,8 @@
  * Uses Drizzle query builder for typed queries and raw SQL for aggregates.
  * All functions are async — DrizzleD1Database is async.
  */
-import { sql } from "drizzle-orm";
+import { and, eq, gte, lte, sql, sum } from "drizzle-orm";
+import * as tables from "../db/schema";
 import type { Db } from "./d1-access";
 import {
   monthBoundaries,
@@ -66,8 +67,13 @@ async function getCategorySpending(
 
   const rows = await db.all<{ category_id: string; total: number }>(
     sql`SELECT category_id, COALESCE(SUM(amount), 0) AS total
-     FROM transactions
-     WHERE date >= ${start} AND date <= ${end} AND category_id IS NOT NULL AND is_child = 0
+     FROM transactions t
+     WHERE date >= ${start} AND date <= ${end} AND category_id IS NOT NULL
+       AND t.is_parent = 0
+       AND (t.is_child = 0 OR EXISTS (
+         SELECT 1 FROM transactions parent
+         WHERE parent.id = t.parent_id AND parent.is_parent = 1
+       ))
      GROUP BY category_id`,
   );
   return rows.map((r) => ({ categoryId: String(r.category_id), spent: Number(r.total) }));
@@ -125,7 +131,6 @@ export async function computeMonthBudget(
             cg.name as group_name, cg.sort_order as group_sort_order
      FROM categories c
      LEFT JOIN category_groups cg ON c.group_id = cg.id
-     WHERE c.hidden = 0
      ORDER BY cg.sort_order, c.sort_order`,
   );
 
@@ -177,6 +182,9 @@ export async function computeMonthBudget(
     if (isIncome) totalIncome += spent;
     totalBudgeted += budgeted;
 
+    // Visibility changes the list, while existing income and assignments still fund the budget.
+    if (cat.hidden) continue;
+
     categoryRows.push({
       categoryId: castId<CategoryId>(categoryId),
       categoryName: String(cat.name),
@@ -190,7 +198,19 @@ export async function computeMonthBudget(
     });
   }
 
-  const toBudget = totalIncome - totalBudgeted - buffered;
+  const { start, end } = monthBoundaries(mk);
+  const [opening] = await db
+    .select({ total: sum(tables.accounts.balanceCurrent) })
+    .from(tables.accounts)
+    .where(
+      and(
+        eq(tables.accounts.offbudget, false),
+        gte(tables.accounts.createdAt, start),
+        lte(tables.accounts.createdAt, `${end}T23:59:59.999Z`),
+      ),
+    )
+    .all();
+  const toBudget = totalIncome + Number(opening?.total ?? 0) - totalBudgeted - buffered;
 
   return {
     month,

@@ -409,8 +409,10 @@ export const CommandResponseSchema = S.Union([
     ok: S.Literal(true),
     data: S.Struct({
       id: S.optional(S.String),
+      transactionId: S.optional(S.String),
       added: S.optional(S.Number),
       updated: S.optional(S.Number),
+      skipped: S.optional(S.Number),
       errors: S.optional(S.Array(S.String)),
     }),
   }),

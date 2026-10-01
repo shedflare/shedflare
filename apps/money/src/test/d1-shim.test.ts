@@ -44,6 +44,7 @@ describe("test infra", () => {
         "transaction_filters",
         "transaction_tags",
         "transactions",
+        "transaction_imports",
       ]),
     );
   });

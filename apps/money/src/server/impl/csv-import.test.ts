@@ -34,7 +34,10 @@ test("Indonesian CSV rows cross the REST boundary with exact amounts and real im
   );
   expect(response.status).toBe(200);
   const result = Schema.decodeUnknownSync(CommandResponseSchema)(await response.json());
-  expect(result).toEqual({ ok: true, data: { added: 2, updated: 0, errors: [] } });
+  expect(result).toMatchObject({
+    ok: true,
+    data: { added: 2, updated: 0, skipped: 0, errors: [] },
+  });
   const records = await router.fetch(new Request("http://localhost/api/transactions"));
   const ledger = Schema.decodeUnknownSync(TransactionsResponseSchema)(await records.json());
   expect(ledger.transactions.map((row) => row.amount).sort((a, b) => a - b)).toEqual([

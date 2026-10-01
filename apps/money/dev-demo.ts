@@ -21,190 +21,228 @@ function requireId(result: { id?: string }): string {
   if (!result.id) throw new Error("Demo record was not created");
   return result.id;
 }
-await command({
-  commandType: "update_setting",
-  payload: { key: "display_currency", value: demoCurrency },
-});
-const now = new Date();
-const date = formatCalendarDate(now);
-const month = date.slice(0, 7);
-const accountId = requireId(
-  await command({ commandType: "create_account", payload: { name: "Everyday" } }),
-);
-await command({
-  commandType: "create_account",
-  payload: { name: "Savings", balance: 420_000 * demoScale, offBudget: true },
-});
-const incomeId = requireId(
+if (process.env.MONEY_DEMO_EMPTY !== "1") {
   await command({
-    commandType: "create_category",
-    payload: { name: "Income", groupId: null, isIncome: true },
-  }),
-);
-await command({
-  commandType: "create_transaction",
-  payload: {
-    row: {
-      accountId,
-      categoryId: incomeId,
-      date,
-      amount: 350_000 * demoScale,
-      payee: "Salary",
-      cleared: true,
-    },
-  },
-});
-const everydayId = requireId(
-  await command({ commandType: "create_category_group", payload: { name: "Everyday" } }),
-);
-const billsId = requireId(
-  await command({ commandType: "create_category_group", payload: { name: "Bills & essentials" } }),
-);
-const savingsId = requireId(
-  await command({ commandType: "create_category_group", payload: { name: "Looking ahead" } }),
-);
-const demoIcons = {
-  Groceries: "basket",
-  "Eating out": "utensils",
-  Coffee: "coffee",
-  Transport: "bus",
-  Rent: "home",
-  Utilities: "bolt",
-  Holiday: "plane",
-  "Emergency fund": "shield",
-  "Little things": "book",
-} satisfies Record<string, CategoryIcon>;
-const examples = [
-  {
-    name: "Groceries",
-    groupId: everydayId,
-    assigned: 45_000,
-    spent: 18_420,
-    target: 45_000,
-    payee: "Whole Foods",
-  },
-  {
-    name: "Eating out",
-    groupId: everydayId,
-    assigned: 18_000,
-    spent: 9_350,
-    target: 18_000,
-    payee: "Noodle House",
-  },
-  {
-    name: "Coffee",
-    groupId: everydayId,
-    assigned: 6_000,
-    spent: 6_800,
-    target: 6_000,
-    payee: "Corner Coffee",
-  },
-  {
-    name: "Transport",
-    groupId: everydayId,
-    assigned: 12_000,
-    spent: 3_200,
-    target: 12_000,
-    payee: "Metro",
-  },
-  {
-    name: "Rent",
-    groupId: billsId,
-    assigned: 125_000,
-    spent: 125_000,
-    target: null,
-    payee: "Rent",
-  },
-  {
-    name: "Utilities",
-    groupId: billsId,
-    assigned: 18_000,
-    spent: 8_200,
-    target: 18_000,
-    payee: "Electric",
-  },
-  { name: "Holiday", groupId: savingsId, assigned: 35_000, spent: 0, target: 40_000, payee: null },
-  {
-    name: "Emergency fund",
-    groupId: savingsId,
-    assigned: 50_000,
-    spent: 0,
-    target: 50_000,
-    payee: null,
-  },
-  {
-    name: "Little things",
-    groupId: everydayId,
-    assigned: 9_000,
-    spent: 1_240,
-    target: null,
-    payee: "Bookshop",
-  },
-];
-let utilitiesId = "";
-for (const example of examples) {
-  const categoryId = requireId(
+    commandType: "update_setting",
+    payload: { key: "display_currency", value: demoCurrency },
+  });
+  const now = new Date();
+  const date = formatCalendarDate(now);
+  const month = date.slice(0, 7);
+  const accountId = requireId(
+    await command({ commandType: "create_account", payload: { name: "Everyday" } }),
+  );
+  await command({
+    commandType: "create_account",
+    payload: { name: "Savings", balance: 420_000 * demoScale, offBudget: true },
+  });
+  const incomeId = requireId(
     await command({
       commandType: "create_category",
-      payload: {
-        name: example.name,
-        groupId: example.groupId,
-        icon: Object.entries(demoIcons).find(([name]) => name === example.name)?.[1],
-      },
+      payload: { name: "Income", groupId: null, isIncome: true },
     }),
   );
-  if (example.name === "Utilities") utilitiesId = categoryId;
   await command({
-    commandType: "set_budget_amount",
-    payload: { month: toMonthInt(month), categoryId, amount: example.assigned * demoScale },
-  });
-  if (example.target)
-    await command({
-      commandType: "update_category",
-      payload: {
-        id: categoryId,
-        goalDef: JSON.stringify({ type: "monthly", amount: example.target * demoScale }),
+    commandType: "create_transaction",
+    payload: {
+      row: {
+        accountId,
+        categoryId: incomeId,
+        date,
+        amount: 350_000 * demoScale,
+        payee: "Salary",
+        cleared: true,
       },
-    });
-  if (example.spent)
+    },
+  });
+  const everydayId = requireId(
+    await command({ commandType: "create_category_group", payload: { name: "Everyday" } }),
+  );
+  const billsId = requireId(
     await command({
-      commandType: "create_transaction",
+      commandType: "create_category_group",
+      payload: { name: "Bills & essentials" },
+    }),
+  );
+  const savingsId = requireId(
+    await command({ commandType: "create_category_group", payload: { name: "Looking ahead" } }),
+  );
+  const demoIcons = {
+    Groceries: "basket",
+    "Eating out": "utensils",
+    Coffee: "coffee",
+    Transport: "bus",
+    Rent: "home",
+    Utilities: "bolt",
+    Holiday: "plane",
+    "Emergency fund": "shield",
+    "Little things": "book",
+  } satisfies Record<string, CategoryIcon>;
+  const examples = [
+    {
+      name: "Groceries",
+      groupId: everydayId,
+      assigned: 45_000,
+      spent: 18_420,
+      target: 45_000,
+      payee: "Whole Foods",
+    },
+    {
+      name: "Eating out",
+      groupId: everydayId,
+      assigned: 18_000,
+      spent: 9_350,
+      target: 18_000,
+      payee: "Noodle House",
+    },
+    {
+      name: "Coffee",
+      groupId: everydayId,
+      assigned: 6_000,
+      spent: 6_800,
+      target: 6_000,
+      payee: "Corner Coffee",
+    },
+    {
+      name: "Transport",
+      groupId: everydayId,
+      assigned: 12_000,
+      spent: 3_200,
+      target: 12_000,
+      payee: "Metro",
+    },
+    {
+      name: "Rent",
+      groupId: billsId,
+      assigned: 125_000,
+      spent: 125_000,
+      target: null,
+      payee: "Rent",
+    },
+    {
+      name: "Utilities",
+      groupId: billsId,
+      assigned: 18_000,
+      spent: 8_200,
+      target: 18_000,
+      payee: "Electric",
+    },
+    {
+      name: "Holiday",
+      groupId: savingsId,
+      assigned: 35_000,
+      spent: 0,
+      target: 40_000,
+      payee: null,
+    },
+    {
+      name: "Emergency fund",
+      groupId: savingsId,
+      assigned: 50_000,
+      spent: 0,
+      target: 50_000,
+      payee: null,
+    },
+    {
+      name: "Little things",
+      groupId: everydayId,
+      assigned: 9_000,
+      spent: 1_240,
+      target: null,
+      payee: "Bookshop",
+    },
+  ];
+  let utilitiesId = "";
+  let littleThingsId = "";
+  for (const example of examples) {
+    const categoryId = requireId(
+      await command({
+        commandType: "create_category",
+        payload: {
+          name: example.name,
+          groupId: example.groupId,
+          icon: Object.entries(demoIcons).find(([name]) => name === example.name)?.[1],
+        },
+      }),
+    );
+    if (example.name === "Utilities") utilitiesId = categoryId;
+    if (example.name === "Little things") littleThingsId = categoryId;
+    await command({
+      commandType: "set_budget_amount",
+      payload: { month: toMonthInt(month), categoryId, amount: example.assigned * demoScale },
+    });
+    if (example.target)
+      await command({
+        commandType: "update_category",
+        payload: {
+          id: categoryId,
+          goalDef: JSON.stringify({ type: "monthly", amount: example.target * demoScale }),
+        },
+      });
+    if (example.spent)
+      await command({
+        commandType: "create_transaction",
+        payload: {
+          row: {
+            accountId,
+            categoryId,
+            date,
+            amount: -example.spent * demoScale,
+            payee: example.payee,
+            cleared: true,
+          },
+        },
+      });
+  }
+  await command({
+    commandType: "create_transaction",
+    payload: {
+      row: { accountId, date, amount: -1_800 * demoScale, payee: "Local store", cleared: true },
+    },
+  });
+  const upcomingDate = formatCalendarDate(
+    new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3),
+  );
+  await command({
+    commandType: "create_schedule",
+    payload: {
+      schedule: {
+        name: "Internet",
+        accountId,
+        categoryId: utilitiesId,
+        amount: -5_900 * demoScale,
+        startDate: upcomingDate,
+        nextDate: upcomingDate,
+        recurrenceRules: JSON.stringify({ type: "monthly" }),
+        active: true,
+      },
+    },
+  });
+
+  for (const payment of [
+    { name: "Netflix", amount: 1_790, days: 5, categoryId: littleThingsId },
+    { name: "Gym", amount: 3_500, days: 12, categoryId: littleThingsId },
+    { name: "Mobile plan", amount: 950, days: 18, categoryId: utilitiesId },
+  ]) {
+    const nextDate = formatCalendarDate(
+      new Date(now.getFullYear(), now.getMonth(), now.getDate() + payment.days),
+    );
+    await command({
+      commandType: "create_schedule",
       payload: {
-        row: {
+        schedule: {
+          name: payment.name,
           accountId,
-          categoryId,
-          date,
-          amount: -example.spent * demoScale,
-          payee: example.payee,
-          cleared: true,
+          categoryId: payment.categoryId,
+          amount: -payment.amount * demoScale,
+          startDate: nextDate,
+          nextDate,
+          recurrenceRules: JSON.stringify({ type: "monthly" }),
         },
       },
     });
+  }
 }
-await command({
-  commandType: "create_transaction",
-  payload: {
-    row: { accountId, date, amount: -1_800 * demoScale, payee: "Local store", cleared: true },
-  },
-});
-const upcomingDate = formatCalendarDate(
-  new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3),
-);
-await command({
-  commandType: "create_schedule",
-  payload: {
-    schedule: {
-      name: "Internet",
-      accountId,
-      categoryId: utilitiesId,
-      amount: -5_900 * demoScale,
-      startDate: upcomingDate,
-      nextDate: upcomingDate,
-      recurrenceRules: JSON.stringify({ type: "monthly" }),
-      active: true,
-    },
-  },
-});
 
 // The local shims implement the runtime methods used by the REST handlers.
 const router = createRouter({

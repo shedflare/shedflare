@@ -1,589 +1,546 @@
 import { createSignal, createMemo, createEffect, For, onCleanup, onMount, Show } from "solid-js";
-import { useParams, useNavigate } from "@solidjs/router";
+import { useParams, useNavigate, useSearchParams } from "@solidjs/router";
 import { dispatch, requireCommandId } from "../lib/pending-ops";
-import { execute, api } from "../lib/api";
+import { api } from "../lib/api";
 import { useCurrency } from "../lib/currency";
 import { usePrivacyMode } from "../lib/privacy";
 import TransactionFilters from "../components/TransactionFilters";
 import TransactionTable from "../components/TransactionTable";
+import ActivityFeed from "../components/ActivityFeed";
+import TransactionDrawer from "../components/TransactionDrawer";
+import AccountTransferDialog from "../components/AccountTransferDialog";
 import MoneyDialog from "../components/MoneyDialog";
+import MoneyIcon from "../components/MoneyIcon";
 import { PageState } from "../components/PageState";
 import { useMoneyShell } from "../components/MoneyShellContext";
-import { parseCsv } from "../domain/csv-import";
+import { filterActivity } from "../lib/activity-view";
+import CsvImportDialog from "../components/CsvImportDialog";
+import CsvExportButton from "../components/CsvExportButton";
 import { emitMoneyDataChanged, listenForMoneyDataChanged } from "../lib/data-events";
-import type { TagInfo, TransactionPatch, TransactionRow } from "../components/TransactionTable";
+import type { TransactionRow } from "../components/TransactionTable";
 import type { Condition } from "../components/TransactionFilters";
 import type {
   AccountApi,
   AccountsResponse,
   AccountTransactionsResponse,
   CategoriesResponse,
+  TagsResponse,
 } from "../domain/schemas-client";
 
-type CategoryRow = Pick<CategoriesResponse["categories"][number], "id" | "name"> & {
-  groupName: string | null;
+type LoadedAccount = {
+  account: AccountApi;
+  accounts: AccountsResponse["accounts"];
+  transactions: AccountTransactionsResponse["transactions"];
+  categories: CategoriesResponse["categories"];
+  tags: TagsResponse["tags"];
+  txTags: Record<string, { id: string; name: string; color: string | null }[]>;
+  ledgerIds: Set<string> | null;
 };
-type ApiTransactionRow = AccountTransactionsResponse["transactions"][number];
-type AccountOption = Pick<AccountsResponse["accounts"][number], "id" | "name" | "closed">;
-
-function toTransactionRow(tx: ApiTransactionRow): TransactionRow {
-  return {
-    id: tx.id,
-    accountId: tx.accountId,
-    date: tx.date,
-    amount: tx.amount,
-    payee: tx.payee,
-    categoryId: tx.categoryId,
-    categoryName: tx.categoryName ?? null,
-    notes: tx.notes,
-    cleared: tx.cleared,
-    reconciled: tx.reconciled,
-    isParent: tx.isParent,
-    isChild: tx.isChild,
-    parentId: tx.parentId,
-    scheduleId: tx.scheduleId,
-    scheduleName: tx.scheduleName ?? null,
-  };
-}
 
 export default function AccountPage() {
   const params = useParams<{ id: string }>();
+  const [searchParams, setSearchParams] = useSearchParams<{ focus?: string }>();
   const navigate = useNavigate();
   const shell = useMoneyShell();
-  const [account, setAccount] = createSignal<AccountApi | null>(null);
-  const [accountOptions, setAccountOptions] = createSignal<AccountOption[]>([]);
-  const [transactions, setTransactions] = createSignal<TransactionRow[]>([]);
-  const [categories, setCategories] = createSignal<CategoryRow[]>([]);
+  const fmt = useCurrency();
+  const privacy = usePrivacyMode();
+  const [loaded, setLoaded] = createSignal<LoadedAccount | null>(null);
+  const data = () => (loaded()?.account.id === params.id ? loaded() : null);
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
+  const [actionError, setActionError] = createSignal<string | null>(null);
+  const [managing, setManaging] = createSignal(false);
+  const [ledger, setLedger] = createSignal(false);
+  const [query, setQuery] = createSignal("");
   const [showImport, setShowImport] = createSignal(false);
   const [showReconcile, setShowReconcile] = createSignal(false);
-  const accountId = () => params.id;
-  const fmt = useCurrency();
-  const privacyBlur = usePrivacyMode();
-
+  const [showTransfer, setShowTransfer] = createSignal(false);
+  const [showRename, setShowRename] = createSignal(false);
   const [filterId, setFilterId] = createSignal<string | null>(null);
   const [filterConditions, setFilterConditions] = createSignal<Condition[]>([]);
   const [filterConditionsOp, setFilterConditionsOp] = createSignal<"and" | "or">("and");
-
-  const [tagList, setTagList] = createSignal<TagInfo[]>([]);
-  const [txTags, setTxTags] = createSignal<
-    Record<string, { id: string; name: string; color: string | null }[]>
-  >({});
-
-  const reconciliableTransactions = createMemo(() =>
-    transactions().filter((tx) => tx.cleared && !tx.reconciled && !tx.isChild),
-  );
-
-  function handleFilterChange(
-    conditions: Condition[],
-    conditionsOp: "and" | "or",
-    fId: string | null,
-  ) {
-    setFilterConditions(conditions);
-    setFilterConditionsOp(conditionsOp);
-    setFilterId(fId);
-    setLoading(true);
-  }
-
+  let requestId = 0;
+  let previousId = params.id;
   createEffect(() => {
+    if (previousId !== params.id) {
+      previousId = params.id;
+      setQuery("");
+      setLedger(false);
+      setFilterId(null);
+      setFilterConditions([]);
+      setActionError(null);
+      setSearchParams({ focus: undefined }, { replace: true });
+    }
     filterId();
     filterConditions();
     filterConditionsOp();
-    if (accountId()) {
-      void loadAccount();
-      void loadCategories();
-      void loadTags();
-    }
+    void loadAccount();
   });
-
-  onMount(() => {
-    onCleanup(listenForMoneyDataChanged(loadAccount));
+  onMount(() => onCleanup(listenForMoneyDataChanged(loadAccount)));
+  onCleanup(() => {
+    requestId++;
   });
-
   async function loadAccount() {
+    const request = ++requestId;
+    const id = params.id;
+    const txQuery = filterId()
+      ? { filterId: filterId()! }
+      : filterConditions().length
+        ? { conditions: filterConditions(), conditionsOp: filterConditionsOp() }
+        : undefined;
+    setLoading(true);
     setError(null);
     try {
-      const fId = filterId();
-      const conditions = filterConditions();
-      const txQuery = fId
-        ? { filterId: fId }
-        : conditions.length > 0
-          ? { conditions, conditionsOp: filterConditionsOp() }
-          : undefined;
-      const [acctData, txData, txTagsData, accountsData] = await Promise.all([
-        api.account(accountId()),
-        api.accountTransactions(accountId(), txQuery),
-        api.accountTags(accountId()),
-        api.accounts(),
-      ]);
-      setAccount(acctData);
-      setAccountOptions(
-        accountsData.accounts.map(({ id, name, closed }) => ({ id, name, closed })),
-      );
-      setTransactions(txData.transactions.map(toTransactionRow));
-      const map: Record<string, { id: string; name: string; color: string | null }[]> = {};
-      for (const tt of txTagsData.transactionTags ?? []) {
-        const txId = tt.transactionId;
-        if (!map[txId]) map[txId] = [];
-        map[txId].push({
-          id: tt.tagId,
-          name: tt.tagName,
-          color: tt.tagColor,
+      const [account, transactions, categories, accounts, tags, txTags, filtered] =
+        await Promise.all([
+          api.account(id),
+          api.accountTransactions(id),
+          api.categories(),
+          api.accounts(),
+          api.tags(),
+          api.accountTags(id),
+          txQuery ? api.accountTransactions(id, txQuery) : Promise.resolve(null),
+        ]);
+      if (request !== requestId || id !== params.id) return;
+      const tagsById: LoadedAccount["txTags"] = {};
+      for (const tag of txTags.transactionTags)
+        (tagsById[tag.transactionId] ??= []).push({
+          id: tag.tagId,
+          name: tag.tagName,
+          color: tag.tagColor,
         });
-      }
-      setTxTags(map);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load account");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadCategories() {
-    try {
-      const data = await api.categories();
-      setCategories(
-        data.categories.map((category) => ({
-          id: category.id,
-          name: category.name,
-          groupName: category.group_name ?? null,
-        })),
-      );
-    } catch {
-      console.warn("[account] failed to load categories");
-    }
-  }
-
-  async function loadTags() {
-    try {
-      const data = await api.tags();
-      setTagList([...data.tags]);
-    } catch {
-      console.warn("[account] failed to load tags");
-    }
-  }
-
-  async function handleCloseAccount() {
-    await dispatch(
-      "close_account",
-      { id: accountId() },
-      {
-        undoInfo: {
-          label: "Close account",
-          inverse: { commandType: "reopen_account", payload: { id: accountId() } },
-        },
-      },
-    ).promise;
-    navigate("/accounts");
-  }
-
-  function patchTransaction(id: string, patch: TransactionPatch) {
-    setTransactions((prev) => prev.map((tx) => (tx.id === id ? { ...tx, ...patch } : tx)));
-  }
-
-  function removeTransaction(id: string) {
-    setTransactions((prev) => prev.filter((tx) => tx.id !== id));
-  }
-
-  function restoreTransaction(tx: TransactionRow) {
-    setTransactions((prev) => (prev.some((item) => item.id === tx.id) ? prev : [tx, ...prev]));
-  }
-
-  function addTransactionTag(txId: string, tag: TagInfo) {
-    setTxTags((prev) => {
-      const tags = prev[txId] ?? [];
-      if (tags.some((item) => item.id === tag.id)) return prev;
-      return { ...prev, [txId]: [...tags, tag] };
-    });
-  }
-
-  function removeTransactionTag(txId: string, tagId: string) {
-    setTxTags((prev) => ({
-      ...prev,
-      [txId]: (prev[txId] ?? []).filter((tag) => tag.id !== tagId),
-    }));
-  }
-
-  const runningBalance = createMemo(() => account()?.balanceCurrent ?? 0);
-
-  return (
-    <div class="page">
-      <PageState
-        loading={loading()}
-        error={error()}
-        onRetry={loadAccount}
-        loadingMessage="Loading account..."
-      >
-        <div class="page-header">
-          <div class="account-switcher-wrap">
-            <label for="account-switcher">Account</label>
-            <select
-              id="account-switcher"
-              class="account-switcher"
-              value={accountId()}
-              onChange={(event) =>
-                navigate(`/accounts/${event.currentTarget.value}`, { replace: true })
-              }
-            >
-              <For each={accountOptions().filter((option) => !option.closed)}>
-                {(option) => <option value={option.id}>{option.name}</option>}
-              </For>
-            </select>
-          </div>
-          <div class="page-actions">
-            <button class="btn btn-secondary btn-sm" onClick={() => setShowImport(true)}>
-              Import CSV
-            </button>
-            <button
-              class="btn btn-primary btn-sm"
-              onClick={() => shell.openTransaction({ initialAccountId: accountId() })}
-            >
-              + Add Transaction
-            </button>
-            <button class="btn btn-secondary btn-sm" onClick={() => setShowReconcile(true)}>
-              Reconcile
-            </button>
-            <button class="btn btn-ghost btn-sm" onClick={handleCloseAccount}>
-              Close Account
-            </button>
-          </div>
-        </div>
-
-        <Show when={account()}>
-          <div class="account-header">
-            <div class={`account-balance-large ${privacyBlur().blurClass()}`}>
-              {fmt().formatCents(runningBalance())}
-            </div>
-            <Show when={account()?.lastReconciled}>
-              {(lastReconciled) => (
-                <div class="account-reconciled-info">Last reconciled: {lastReconciled()}</div>
-              )}
-            </Show>
-          </div>
-        </Show>
-
-        <TransactionFilters
-          accountId={accountId()}
-          activeConditions={filterConditions()}
-          activeConditionsOp={filterConditionsOp()}
-          onConditionsChange={handleFilterChange}
-        />
-
-        <Show when={showImport()}>
-          <ImportModal accountId={accountId()} onClose={() => setShowImport(false)} />
-        </Show>
-
-        <Show when={showReconcile()}>
-          <ReconcileModal
-            accountId={accountId()}
-            runningBalance={runningBalance()}
-            transactions={reconciliableTransactions()}
-            onClose={() => {
-              setShowReconcile(false);
-            }}
-            onFinish={() => {
-              setShowReconcile(false);
-              void loadAccount();
-            }}
-          />
-        </Show>
-
-        <Show
-          when={transactions().length > 0}
-          fallback={<div class="empty-state">No transactions yet.</div>}
-        >
-          <TransactionTable
-            transactions={transactions()}
-            categories={categories()}
-            txTags={txTags()}
-            tagList={tagList()}
-            showBalance={filterConditions().length === 0 && !filterId()}
-            openingBalance={account()?.openingBalance ?? 0}
-            onReload={loadAccount}
-            onTransactionPatch={patchTransaction}
-            onTransactionRemove={removeTransaction}
-            onTransactionRestore={restoreTransaction}
-            onTagAdd={addTransactionTag}
-            onTagRemove={removeTransactionTag}
-            onCreateSchedule={(tx) => {
-              dispatch(
-                "create_schedule",
-                {
-                  schedule: {
-                    accountId: tx.accountId,
-                    categoryId: tx.categoryId,
-                    name: tx.payee ?? "From transaction",
-                    amount: tx.amount,
-                    recurrenceRules: JSON.stringify({ type: "monthly" }),
-                    startDate: new Date().toISOString().slice(0, 10),
-                  },
-                },
-                {
-                  undoInfo: {
-                    label: "Create schedule from transaction",
-                    inverse: (data) => ({
-                      commandType: "delete_schedule",
-                      payload: { id: requireCommandId(data) },
-                    }),
-                  },
-                },
-              );
-            }}
-          />
-        </Show>
-      </PageState>
-    </div>
-  );
-}
-
-function ImportModal(props: { accountId: string; onClose: () => void }) {
-  const [file, setFile] = createSignal<File | null>(null);
-  const [importing, setImporting] = createSignal(false);
-  const [result, setResult] = createSignal<{ added: number; errors: string[] } | null>(null);
-
-  async function handleImport() {
-    const f = file();
-    if (!f || importing()) return;
-    setImporting(true);
-    setResult(null);
-
-    try {
-      const parsed = parseCsv(await f.text());
-      if (parsed.errors.length || parsed.rows.length === 0) {
-        setResult({
-          added: 0,
-          errors: parsed.errors.length ? parsed.errors : ["No transactions found."],
-        });
-        return;
-      }
-      const result = await execute("import_transactions", {
-        accountId: props.accountId,
-        transactions: parsed.rows,
-        isPreview: false,
+      setLoaded({
+        account,
+        accounts: accounts.accounts,
+        transactions: transactions.transactions,
+        categories: categories.categories,
+        tags: tags.tags,
+        txTags: tagsById,
+        ledgerIds: filtered ? new Set(filtered.transactions.map((row) => row.id)) : null,
       });
-      if (result.ok) {
-        setResult({ added: result.data.added ?? 0, errors: [...(result.data.errors ?? [])] });
-        emitMoneyDataChanged();
-      } else {
-        setResult({ added: 0, errors: [result.error] });
-      }
-    } catch (err) {
-      setResult({ added: 0, errors: [err instanceof Error ? err.message : "Import failed"] });
+    } catch (caught) {
+      if (request === requestId)
+        setError(caught instanceof Error ? caught.message : "Could not load account");
     } finally {
-      setImporting(false);
+      if (request === requestId) setLoading(false);
     }
   }
-
-  return (
-    <MoneyDialog title="Import CSV" onClose={props.onClose} busy={importing()}>
-      <div class="money-form">
-        <input
-          aria-label="CSV file"
-          type="file"
-          accept=".csv,.tsv"
-          disabled={importing()}
-          onChange={(e) => {
-            setFile(e.currentTarget.files?.[0] ?? null);
-            setResult(null);
-          }}
-        />
-        <Show when={file()}>
-          <p class="file-info">
-            {file()?.name} ({((file()?.size ?? 0) / 1024).toFixed(1)} KB)
-          </p>
-        </Show>
-        <Show when={result()}>
-          <div class="import-result">
-            <p role="status">Added: {result()?.added} transactions</p>
-            <Show when={(result()?.errors.length ?? 0) > 0}>
-              <ul role="alert">
-                <For each={result()?.errors}>{(err) => <li>{err}</li>}</For>
-              </ul>
-            </Show>
-          </div>
-        </Show>
-        <div class="form-actions">
-          <button class="btn btn-ghost" onClick={props.onClose} disabled={importing()}>
-            Cancel
-          </button>
-          <button
-            class="btn btn-primary"
-            onClick={handleImport}
-            disabled={!file() || importing() || (result()?.added ?? 0) > 0}
-          >
-            {importing() ? "Importing..." : result()?.errors.length ? "Retry import" : "Import"}
-          </button>
-        </div>
-      </div>
-    </MoneyDialog>
+  const rows = createMemo(() =>
+    filterActivity(
+      (data()?.transactions ?? []).map((row) => ({
+        ...row,
+        accountName: data()?.account.name,
+        categoryName:
+          data()?.categories.find((category) => category.id === row.categoryId)?.name ??
+          row.categoryName ??
+          null,
+      })),
+      { month: null, query: query() },
+    ),
   );
-}
-
-function ReconcileModal(props: {
-  accountId: string;
-  runningBalance: number;
-  transactions: TransactionRow[];
-  onClose: () => void;
-  onFinish: () => void;
-}) {
-  const fmt = useCurrency();
-  const [statementBalance, setStatementBalance] = createSignal("");
-  const [processing, setProcessing] = createSignal(false);
-  const [done, setDone] = createSignal(false);
-
-  const handleClose = () => {
-    setStatementBalance("");
-    props.onClose();
-  };
-
-  const handleDone = () => {
-    setStatementBalance("");
-    props.onFinish();
-  };
-
-  const diff = createMemo(() => {
-    const sb = fmt().parseInput(statementBalance() || "0");
-    return sb - props.runningBalance;
-  });
-
-  const isBalanced = () => diff() === 0;
-
-  async function handleFinish() {
-    if (!Number.isSafeInteger(diff())) return;
-    setProcessing(true);
-
-    const now = new Date().toISOString();
-    const promises: Promise<unknown>[] = [];
-
-    for (const tx of props.transactions) {
-      promises.push(
-        dispatch("update_transaction", {
-          id: tx.id,
-          fields: { reconciled: true },
-        }).promise,
-      );
-    }
-
-    if (!isBalanced()) {
-      promises.push(
-        dispatch("create_transaction", {
-          row: {
-            accountId: props.accountId,
-            date: now.slice(0, 10),
-            amount: -diff(),
-            payee: "Reconciliation Adjustment",
-            notes: "Balance adjustment from reconciliation",
-            cleared: true,
-            reconciled: true,
+  const ledgerRows = createMemo(() =>
+    rows().filter((row) => !data()?.ledgerIds || data()?.ledgerIds?.has(row.id)),
+  );
+  const selected = createMemo(() =>
+    data()?.transactions.find((row) => row.id === searchParams.focus),
+  );
+  const clearedBalance = createMemo(
+    () =>
+      (data()?.account.openingBalance ?? 0) +
+      (data()?.transactions ?? [])
+        .filter((row) => !row.isChild && row.cleared)
+        .reduce((sum, row) => sum + row.amount, 0),
+  );
+  async function toggleClosed() {
+    const account = data()?.account;
+    if (!account || managing()) return;
+    setManaging(true);
+    setActionError(null);
+    try {
+      await dispatch(
+        account.closed ? "reopen_account" : "close_account",
+        { id: account.id },
+        {
+          undoInfo: {
+            label: account.closed ? "Account reopened" : "Account closed",
+            inverse: {
+              commandType: account.closed ? "close_account" : "reopen_account",
+              payload: { id: account.id },
+            },
           },
-        }).promise,
-      );
+        },
+      ).promise;
+      emitMoneyDataChanged();
+      if (!account.closed) navigate("/accounts");
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : "Could not update account");
+    } finally {
+      setManaging(false);
     }
-
-    promises.push(
-      dispatch("update_account", {
-        id: props.accountId,
-        lastReconciled: now,
-      }).promise,
-    );
-
-    await Promise.all(promises);
-    setProcessing(false);
-    setDone(true);
   }
-
   return (
-    <div class="modal-overlay" onClick={handleClose}>
-      <div class="modal" onClick={(e) => e.stopPropagation()}>
-        <div class="modal-header">
-          <h2>Reconcile Account</h2>
-          <button class="modal-close" onClick={handleClose}>
-            ✕
-          </button>
-        </div>
-
-        <Show
-          when={!done()}
-          fallback={
-            <div class="modal-body" style={{ "text-align": "center", padding: "24px" }}>
-              <p style={{ "font-size": "1.1rem", "margin-bottom": "16px" }}>
-                ✓ Reconciliation complete
-              </p>
-              <p style={{ color: "var(--text-secondary)" }}>
-                {props.transactions.length} transactions marked as reconciled.
-                {!isBalanced() ? " An adjustment transaction was created." : ""}
-              </p>
-              <div class="form-actions" style={{ "margin-top": "24px" }}>
-                <button class="btn btn-primary" onClick={handleDone}>
-                  Done
-                </button>
-              </div>
-            </div>
-          }
-        >
-          <div class="modal-body">
-            <div class="reconcile-summary">
-              <div class="reconcile-row">
-                <span class="reconcile-label">Running balance:</span>
-                <span class="reconcile-value">{fmt().formatCents(props.runningBalance)}</span>
-              </div>
-              <div class="reconcile-row">
-                <span class="reconcile-label">Statement balance:</span>
-                <input
-                  type="text"
-                  inputmode={fmt().inputMode}
-                  class="reconcile-input"
-                  placeholder="0"
-                  value={statementBalance()}
-                  onInput={(e) => setStatementBalance(e.currentTarget.value)}
-                  autofocus
-                />
-              </div>
-              <div
-                class="reconcile-row reconcile-diff"
-                classList={{
-                  "reconcile-balanced": isBalanced(),
-                  "reconcile-negative": diff() < 0,
-                  "reconcile-positive": diff() > 0,
+    <div class="page account-detail-page" aria-busy={loading()}>
+      <PageState loading={loading() && !data()} error={error()} onRetry={loadAccount}>
+        <div class="page-header">
+          <select
+            class="account-name-picker"
+            aria-label="Account"
+            value={params.id}
+            disabled={managing()}
+            onChange={(event) => navigate(`/accounts/${event.currentTarget.value}`)}
+          >
+            <For each={data()?.accounts.filter((row) => !row.closed || row.id === params.id)}>
+              {(account) => <option value={account.id}>{account.name}</option>}
+            </For>
+          </select>
+          <details class="entity-menu">
+            <summary aria-label="Account actions">
+              <MoneyIcon name="more" />
+            </summary>
+            <div
+              class="entity-menu-popover"
+              onClick={() => {
+                document
+                  .querySelectorAll(".entity-menu[open]")
+                  .forEach((menu) => menu.removeAttribute("open"));
+              }}
+            >
+              <button
+                onClick={() => {
+                  setLedger(!ledger());
+                  setSearchParams({ focus: undefined });
                 }}
               >
-                <span class="reconcile-label">Difference:</span>
-                <span class="reconcile-value">
-                  {Number.isSafeInteger(diff()) ? fmt().formatCents(diff()) : "—"}
-                </span>
-              </div>
+                {ledger() ? "Activity" : "Ledger"}
+              </button>
+              <button onClick={() => setShowImport(true)} disabled={data()?.account.closed}>
+                Import CSV
+              </button>
+              <CsvExportButton accountId={params.id} />
+              <button onClick={() => setShowReconcile(true)} disabled={data()?.account.closed}>
+                Reconcile
+              </button>
+              <button onClick={() => setShowRename(true)}>Rename</button>
+              <button onClick={() => void toggleClosed()} disabled={managing()}>
+                {data()?.account.closed ? "Reopen account" : "Close account"}
+              </button>
             </div>
-
-            <Show when={(props.transactions.length ?? 0) === 0}>
-              <p style={{ color: "var(--text-muted)", "margin-top": "16px" }}>
-                No cleared transactions to reconcile.
-              </p>
-            </Show>
-
-            <Show when={!isBalanced() && statementBalance() !== ""}>
-              <div class="reconcile-adjustment-note">
-                {diff() > 0
-                  ? "An adjustment transaction will credit the account."
-                  : "An adjustment transaction will debit the account."}
-              </div>
-            </Show>
-          </div>
-
-          <div class="form-actions">
-            <button class="btn btn-ghost" onClick={handleClose}>
-              Cancel
+          </details>
+        </div>
+        <div class="account-overview">
+          <strong class={privacy().blurClass()}>
+            {fmt().formatCents(data()?.account.balanceCurrent ?? 0)}
+          </strong>
+          <div class="account-main-actions">
+            <button
+              class="btn btn-secondary"
+              disabled={
+                data()?.account.closed ||
+                (data()?.accounts.filter((row) => !row.closed).length ?? 0) < 2
+              }
+              onClick={() => setShowTransfer(true)}
+            >
+              <MoneyIcon name="move" size={17} />
+              Transfer
             </button>
             <button
               class="btn btn-primary"
-              onClick={handleFinish}
-              disabled={processing() || statementBalance() === "" || !Number.isSafeInteger(diff())}
+              disabled={data()?.account.closed}
+              onClick={() => shell.openTransaction({ initialAccountId: params.id })}
             >
-              {processing() ? "Reconciling..." : "Finish Reconciliation"}
+              <MoneyIcon name="plus" size={17} />
+              Add
             </button>
           </div>
+        </div>
+        <Show when={actionError()}>
+          <p class="form-error" role="alert">
+            {actionError()}
+          </p>
         </Show>
-      </div>
+        <div class="transaction-search">
+          <MoneyIcon name="search" size={17} />
+          <input
+            type="search"
+            aria-label="Search account activity"
+            placeholder="Search activity"
+            value={query()}
+            onInput={(event) => setQuery(event.currentTarget.value)}
+          />
+        </div>
+        <Show when={ledger()}>
+          <div class="account-ledger-heading">
+            <span>Ledger</span>
+            <button class="text-button" onClick={() => setLedger(false)}>
+              Activity
+            </button>
+          </div>
+          <details class="activity-advanced">
+            <summary>
+              <MoneyIcon name="settings" size={16} />
+              Filters
+            </summary>
+            <TransactionFilters
+              accountId={params.id}
+              activeConditions={filterConditions()}
+              activeConditionsOp={filterConditionsOp()}
+              onConditionsChange={(conditions, op, id) => {
+                setFilterConditions(conditions);
+                setFilterConditionsOp(op);
+                setFilterId(id);
+              }}
+            />
+          </details>
+        </Show>
+        <Show
+          when={rows().length}
+          fallback={
+            <p class="quiet-empty">{query() ? "No matching transactions" : "No activity yet"}</p>
+          }
+        >
+          <Show
+            when={ledger()}
+            fallback={
+              <ActivityFeed
+                transactions={rows()}
+                categories={data()?.categories ?? []}
+                hideAccount
+                onSelect={(id) => setSearchParams({ focus: id })}
+              />
+            }
+          >
+            <TransactionTable
+              transactions={ledgerRows().map(
+                (row): TransactionRow => ({
+                  ...row,
+                  accountName: row.accountName ?? undefined,
+                  categoryName: row.categoryName ?? null,
+                }),
+              )}
+              categories={(data()?.categories ?? []).map((row) => ({
+                id: row.id,
+                name: row.name,
+                groupName: row.group_name ?? null,
+              }))}
+              txTags={data()?.txTags ?? {}}
+              tagList={[...(data()?.tags ?? [])]}
+              showBalance={!filterId() && !filterConditions().length && !query()}
+              openingBalance={data()?.account.openingBalance ?? 0}
+              onReload={loadAccount}
+              onTransactionRemove={() => void loadAccount()}
+              onTransactionRestore={() => void loadAccount()}
+              focusId={searchParams.focus}
+              onTagAdd={() => void loadAccount()}
+              onTagRemove={() => void loadAccount()}
+              onCreateSchedule={(tx) => {
+                void dispatch(
+                  "create_schedule",
+                  {
+                    schedule: {
+                      accountId: tx.accountId,
+                      categoryId: tx.categoryId,
+                      name: tx.payee ?? "Recurring payment",
+                      amount: tx.amount,
+                      recurrenceRules: JSON.stringify({ type: "monthly" }),
+                      startDate: tx.date,
+                      nextDate: tx.date,
+                    },
+                  },
+                  {
+                    undoInfo: {
+                      label: "Recurring payment created",
+                      inverse: (result) => ({
+                        commandType: "delete_schedule",
+                        payload: { id: requireCommandId(result) },
+                      }),
+                    },
+                  },
+                )
+                  .promise.then(() => emitMoneyDataChanged())
+                  .catch((caught) =>
+                    setActionError(
+                      caught instanceof Error ? caught.message : "Could not create payment",
+                    ),
+                  );
+              }}
+            />
+          </Show>
+        </Show>
+      </PageState>
+      <Show when={!ledger() && selected()?.id} keyed>
+        {(id) => (
+          <TransactionDrawer
+            transaction={data()!.transactions.find((row) => row.id === id)!}
+            categories={data()!.categories}
+            accounts={data()!.accounts}
+            children={data()!.transactions.filter((row) => row.parentId === id)}
+            tags={data()?.txTags[id] ?? []}
+            onClose={() => setSearchParams({ focus: undefined }, { replace: true })}
+            onLedger={() => setLedger(true)}
+          />
+        )}
+      </Show>
+      <Show when={showTransfer() && data()}>
+        <AccountTransferDialog
+          accounts={data()!.accounts}
+          fromAccountId={params.id}
+          onClose={() => setShowTransfer(false)}
+        />
+      </Show>
+      <Show when={showImport()}>
+        <CsvImportDialog accountId={params.id} onClose={() => setShowImport(false)} />
+      </Show>
+      <Show when={showReconcile()}>
+        <ReconcileModal
+          accountId={params.id}
+          runningBalance={clearedBalance()}
+          onClose={() => setShowReconcile(false)}
+        />
+      </Show>
+      <Show when={showRename() && data()?.account.id} keyed>
+        {(id) => (
+          <RenameAccount
+            account={data()!.accounts.find((row) => row.id === id)!}
+            onClose={() => setShowRename(false)}
+          />
+        )}
+      </Show>
     </div>
+  );
+}
+
+function RenameAccount(props: { account: AccountApi; onClose: () => void }) {
+  const original = props.account;
+  const [name, setName] = createSignal(original.name);
+  const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
+  async function save(event: SubmitEvent) {
+    event.preventDefault();
+    if (!name().trim() || busy()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await dispatch(
+        "update_account",
+        { id: original.id, name: name().trim() },
+        {
+          undoInfo: {
+            label: "Account renamed",
+            inverse: {
+              commandType: "update_account",
+              payload: { id: original.id, name: original.name },
+            },
+          },
+        },
+      ).promise;
+      emitMoneyDataChanged();
+      props.onClose();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not rename account");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <MoneyDialog title="Rename account" busy={busy()} onClose={props.onClose}>
+      <form class="money-form" onSubmit={save}>
+        <div class="form-group">
+          <label for="rename-account-name">Name</label>
+          <input
+            id="rename-account-name"
+            value={name()}
+            required
+            disabled={busy()}
+            onInput={(event) => setName(event.currentTarget.value)}
+            autofocus
+          />
+        </div>
+        <Show when={error()}>
+          <p class="form-error" role="alert">
+            {error()}
+          </p>
+        </Show>
+        <button class="btn btn-primary btn-full" disabled={busy()}>
+          Save
+        </button>
+      </form>
+    </MoneyDialog>
+  );
+}
+function ReconcileModal(props: { accountId: string; runningBalance: number; onClose: () => void }) {
+  const fmt = useCurrency();
+  const privacy = usePrivacyMode();
+  const [statement, setStatement] = createSignal("");
+  const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
+  const difference = createMemo(() => fmt().parseInput(statement()) - props.runningBalance);
+  async function save(event: SubmitEvent) {
+    event.preventDefault();
+    const amount = fmt().parseInput(statement());
+    if (
+      !statement().trim() ||
+      !Number.isSafeInteger(amount) ||
+      !Number.isSafeInteger(difference()) ||
+      busy()
+    )
+      return;
+    setBusy(true);
+    setError(null);
+    try {
+      await dispatch("reconcile_account", {
+        accountId: props.accountId,
+        expectedBalance: props.runningBalance,
+        statementBalance: amount,
+      }).promise;
+      emitMoneyDataChanged();
+      props.onClose();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not reconcile account");
+      emitMoneyDataChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <MoneyDialog title="Reconcile" busy={busy()} onClose={props.onClose}>
+      <form class="money-form" onSubmit={save}>
+        <div class="reconcile-balance">
+          <span>Cleared balance</span>
+          <strong class={privacy().blurClass()}>{fmt().formatCents(props.runningBalance)}</strong>
+        </div>
+        <div class="form-group">
+          <label for="statement-balance">Statement balance</label>
+          <input
+            id="statement-balance"
+            type="text"
+            inputmode={fmt().inputMode}
+            value={statement()}
+            onInput={(event) => setStatement(event.currentTarget.value)}
+            disabled={busy()}
+            autofocus
+            required
+          />
+        </div>
+        <Show when={statement().trim() && Number.isSafeInteger(difference())}>
+          <div class="reconcile-balance">
+            <span>{difference() === 0 ? "Matched" : "Adjustment"}</span>
+            <strong class={privacy().blurClass()}>
+              {difference() === 0 ? <MoneyIcon name="check" /> : fmt().formatCents(difference())}
+            </strong>
+          </div>
+        </Show>
+        <Show when={error()}>
+          <p class="form-error" role="alert">
+            {error()}
+          </p>
+        </Show>
+        <button
+          class="btn btn-primary btn-full"
+          disabled={busy() || !statement().trim() || !Number.isSafeInteger(difference())}
+        >
+          {busy() ? "Reconciling…" : "Reconcile"}
+        </button>
+      </form>
+    </MoneyDialog>
   );
 }

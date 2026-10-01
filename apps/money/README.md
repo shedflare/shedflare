@@ -9,8 +9,30 @@ Durable Objects, WebSocket sync, TanStack DB collections, and IndexedDB offline 
 Home is the everyday view: category balances, quick expense entry, recent activity, and upcoming
 payments. Budget is the monthly planning view: allocations, targets, and money held for next month.
 Open a category from either view to record spending, assign money, move funds, or edit its target.
-Moving money commits both sides together and supports undo. Existing account ledgers, imports,
-reconciliation, schedules, and reports remain available.
+Moving money commits both sides together and supports undo.
+
+Fresh installs offer a skippable setup: currency, first account and opening balance, then editable
+starter categories with icons. Everything saves together, with drafts retained for retry.
+
+Reports opens a monthly view with income, expenses, and category spending. Small percentage
+comparisons show changes from the previous month; selecting a category opens its Activity. Net
+worth is a secondary view, and advanced reports remain in the menu.
+
+Activity groups transactions by date, with monthly totals, search, and a tap-to-edit drawer.
+The ledger toggle keeps splits, tags, and advanced editing available. Budget shows one editable
+amount per category. Reveal a category's previous month to see its amounts and usage bar, or copy
+that amount with undo. Whole-month copying and Fund targets are in the actions menu. Current
+spending and available balances live in the everyday views. Copying replaces the destination
+assignment; subsequent edits use the same inputs.
+
+Accounts open on their balance and activity. Transfer moves money between two accounts, with both
+entries saved together and one undo step. Ledger, import, reconciliation, rename, and close/reopen
+are in the account menu. Reconciliation uses the cleared balance and saves its adjustment together.
+
+Recurring lists payment names, next dates, and amounts. Open one to record or skip a payment;
+Edit, Pause, and Archive are in its menu. The form includes account, category, next date, and
+optional recurrence details. Discovery opens a prefilled draft. Recording saves the transaction and
+next date together; undo restores both. Failed saves keep the draft available for retry.
 
 Indonesian rupiah is supported throughout the budget: choose it in Settings → Currency.
 Automatic number formatting uses `Rp1.250.000`, with whole-rupiah entry and grouped amounts in
@@ -18,12 +40,38 @@ transactions, assignments, targets, transfers, balances, and schedules. Mobile l
 for longer amounts. Currency is a single-budget preference; it does not convert existing data.
 
 Categories can use an outline icon or their initial. Choose one when adding a category or from
-its drawer's settings; the saved choice appears on Home and Budget and supports undo.
+its drawer's settings; the saved choice appears on Home, Budget, and Activity and supports undo.
+
+Categories uses a quiet grouped list. Tap a category to edit its name, icon, group, or optional
+target. Reorder mode includes touch and keyboard controls; rename, hide/show, and ordering support
+undo. Deleting a category confirms where existing activity goes and removes its monthly assignments.
+Deleting a group retains its categories and history. Failed changes keep their drafts for retry.
+Hiding a category preserves its assigned money in budget totals. Opening balances are available to
+assign once, in the account's creation month, and remain separate from income reports.
+
+Settings keeps currency, number format, privacy and CSV export up front. Date format and closed
+account visibility are under More preferences. Failed saves retain the selection; the global
+display updates after the write succeeds.
+
+Import CSV from Settings or an account's actions. A review shows parsed transactions and possible
+duplicates before saving; column and date/number mapping stays collapsed when detection works.
+Indonesian bank headings and whole rupiah amounts are supported. Choose a source account when a
+file contains multiple accounts. Import accepts up to 200 rows per file (2 MB), uses existing category
+names, and skips possible duplicates by default without overwriting existing transactions.
+Writes are atomic; retries after an interrupted response return the same import. Undo/redo preserves
+exact transaction IDs and refuses undo after imported rows have been changed.
+
+Export CSV downloads all accounts from Settings or one account from its actions. Quoted names and
+multiline notes survive round trips. CSV is a flat ledger: split parents appear once. It does not
+restore split/transfer relationships or account opening balances, so it is not a full data backup.
+The included transaction-import receipt migration is applied by the normal Alchemy deployment.
 
 Try the interface locally with sample data, without Cloudflare credentials or resource creation:
 
 ```bash
 pnpm --filter @shedflare/money dev:demo
+# Empty database for first-run setup
+MONEY_DEMO_EMPTY=1 pnpm --filter @shedflare/money dev:demo
 # Indonesian rupiah sample data
 MONEY_DEMO_CURRENCY=IDR pnpm --filter @shedflare/money dev:demo
 ```
@@ -48,7 +96,7 @@ Shedflare Money is a zero-based budgeting (envelope budgeting) app for personal 
 
 - **Envelope budgeting** — assign income to categories, track leftover, carryover between months
 - **Buffer** — hold money aside for next month
-- **Budget actions** — cover overspending, move money between categories, fill missing assignments from the previous month
+- **Budget actions** — cover overspending, move money between categories, copy last month's full plan and compare spending while adjusting it
 - **5 goal template types** — monthly (fixed amount), byDate (save by deadline), refill (maintain target balance), periodic (every N months), percentage (% of monthly income)
 - **Budgeted minus spending = leftover** (computed live via SQL queries, not stored)
 
@@ -67,7 +115,7 @@ Shedflare Money is a zero-based budgeting (envelope budgeting) app for personal 
 - **Schedule discovery** — analyze transaction history to detect recurring patterns, suggest schedules with confidence scores
 - **Rules engine** — auto-categorize transactions on import with conditions (payee, amount, date, notes, account, cleared + 12 comparison operators) and actions (set category/payee/notes, prepend/append notes, delete transaction, link schedule)
 - **Rule test UI** — preview which existing transactions would match a rule
-- **CSV import** — upload CSV files, parse, run rules, insert/update transactions
+- **CSV import** — parse and review files, map columns when needed, skip account-scoped duplicates, and insert atomically with safe retry and undo
 
 ### Home & Reports
 
@@ -212,7 +260,7 @@ These are intentional boundaries — not missing features, but deliberate exclus
 - **CSV import only** — no OFX/QFX/QIF/CAMT bank formats. No bank sync (GoCardless, SimpleFIN). Indonesian banks use CSV exports.
 - **No batch operations** — single transaction commands only. No bulk insert/update/delete endpoints.
 - **No data encryption** — data at rest in DO SQLite is unencrypted. No E2E encryption.
-- **No backups/restore** — no backup list or restore mechanism. Users should use the CSV export and dashboard export features.
+- **No built-in full backups/restore** — CSV and dashboard exports do not restore all persisted state or structural transaction relationships.
 
 ### Localization & Theming
 

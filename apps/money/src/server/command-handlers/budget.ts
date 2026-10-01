@@ -8,6 +8,8 @@ import type { CommandResult } from "../../domain/types";
 
 type BudgetCommand =
   | "set_budget_amount"
+  | "allocate_budget"
+  | "set_budget_plan"
   | "set_budget_carryover"
   | "set_buffer"
   | "copy_previous_month"
@@ -26,6 +28,135 @@ export async function handleBudgetCommands(
   db: Db,
 ): Promise<CommandResult> {
   switch (command.commandType) {
+    case "set_budget_plan": {
+      const { month: key, assignments } = command.payload;
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(key) || assignments.length === 0) {
+        return { ok: false, error: "Choose a valid month and at least one category" };
+      }
+      const ids = assignments.map((row) => row.categoryId);
+      if (
+        new Set(ids).size !== ids.length ||
+        assignments.some((row) => !Number.isSafeInteger(row.amount))
+      ) {
+        return { ok: false, error: "Use distinct categories and whole amounts" };
+      }
+      const categories = await db
+        .select()
+        .from(s.categories)
+        .where(inArray(s.categories.id, ids))
+        .all();
+      if (
+        categories.length !== ids.length ||
+        categories.some((row) => row.hidden || row.isIncome)
+      ) {
+        return { ok: false, error: "Choose visible expense categories" };
+      }
+      const month = toMonthInt(key);
+      const before = await computeMonthBudget(db, month);
+      const amounts = new Map(assignments.map((row) => [row.categoryId, row.amount]));
+      if (
+        !before ||
+        !Number.isSafeInteger(before.toBudget) ||
+        !Number.isSafeInteger(
+          before.toBudget +
+            before.categories.reduce(
+              (sum, row) =>
+                sum +
+                (amounts.has(row.categoryId)
+                  ? row.budgeted - (amounts.get(row.categoryId) ?? 0)
+                  : 0),
+              0,
+            ),
+        )
+      ) {
+        return { ok: false, error: "The planned amount is too large" };
+      }
+      const now = nowIso();
+      const [first, ...rest] = assignments.map((row) =>
+        db
+          .insert(s.budgets)
+          .values({
+            id: budgetId(month, row.categoryId),
+            month,
+            categoryId: row.categoryId,
+            amount: row.amount,
+            carryover: false,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: s.budgets.id,
+            set: { amount: row.amount, updatedAt: now },
+          }),
+      );
+      if (first) await db.batch([first, ...rest]);
+      return { ok: true, data: { month, budget: await computeMonthBudget(db, month) } };
+    }
+
+    case "allocate_budget": {
+      const { month: key, allocations } = command.payload;
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(key) || allocations.length === 0) {
+        return { ok: false, error: "Choose a valid month and at least one category" };
+      }
+      const ids = allocations.map((row) => row.categoryId);
+      if (
+        new Set(ids).size !== ids.length ||
+        allocations.some((row) => !Number.isSafeInteger(row.amount) || row.amount === 0)
+      ) {
+        return { ok: false, error: "Use distinct categories and whole amounts" };
+      }
+      const categories = await db
+        .select()
+        .from(s.categories)
+        .where(inArray(s.categories.id, ids))
+        .all();
+      if (
+        categories.length !== ids.length ||
+        categories.some((category) => category.hidden || category.isIncome)
+      ) {
+        return { ok: false, error: "Choose visible expense categories" };
+      }
+      const month = toMonthInt(key);
+      const before = await computeMonthBudget(db, month);
+      const total = allocations.reduce((sum, row) => sum + row.amount, 0);
+      if (
+        !before ||
+        !Number.isSafeInteger(total) ||
+        !Number.isSafeInteger(before.toBudget - total) ||
+        allocations.some(
+          (row) =>
+            !Number.isSafeInteger(
+              (before.categories.find((category) => category.categoryId === row.categoryId)
+                ?.budgeted ?? 0) + row.amount,
+            ),
+        )
+      ) {
+        return { ok: false, error: "The planned amount is too large" };
+      }
+      const now = nowIso();
+      // Add deltas so applying/undoing a plan preserves later individual assignments.
+      // D1 batch is transactional: a failed category leaves the whole plan untouched.
+      const [first, ...rest] = allocations.map((row) =>
+        db
+          .insert(s.budgets)
+          .values({
+            id: budgetId(month, row.categoryId),
+            month,
+            categoryId: row.categoryId,
+            amount: row.amount,
+            carryover: false,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: s.budgets.id,
+            set: { amount: sql`${s.budgets.amount} + ${row.amount}`, updatedAt: now },
+          }),
+      );
+      if (first) await db.batch([first, ...rest]);
+      return { ok: true, data: { month, budget: await computeMonthBudget(db, month) } };
+    }
+
     case "set_budget_amount": {
       const p = command.payload;
       const { month, categoryId, amount } = p;

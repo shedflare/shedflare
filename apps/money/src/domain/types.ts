@@ -6,6 +6,7 @@ import * as Schema from "effect/Schema";
 export const SYNC_PROTOCOL_VERSION = "money-v1";
 
 export const SYNC_COMMAND_TYPES = [
+  "setup_money",
   "create_account",
   "update_account",
   "delete_account",
@@ -13,11 +14,17 @@ export const SYNC_COMMAND_TYPES = [
   "reopen_account",
   "reorder_accounts",
   "create_transaction",
+  "create_account_transfer",
+  "delete_account_transfer",
+  "reconcile_account",
   "update_transaction",
   "delete_transaction",
   "split_transaction",
   "import_transactions",
+  "undo_transaction_import",
   "set_budget_amount",
+  "allocate_budget",
+  "set_budget_plan",
   "set_budget_carryover",
   "set_buffer",
   "copy_previous_month",
@@ -33,7 +40,9 @@ export const SYNC_COMMAND_TYPES = [
   "delete_category",
   "create_category_group",
   "update_category_group",
+  "delete_category_group",
   "reorder_categories",
+  "reorder_category_groups",
   "create_payee",
   "update_payee",
   "delete_payee",
@@ -43,6 +52,7 @@ export const SYNC_COMMAND_TYPES = [
   "delete_schedule",
   "skip_schedule_date",
   "post_schedule_transaction",
+  "undo_schedule_payment",
   "create_rule",
   "update_rule",
   "delete_rule",
@@ -149,6 +159,7 @@ export interface CommandData {
   budget?: object | null;
   added?: number;
   updated?: number;
+  skipped?: number;
   errors?: readonly string[];
   childIds?: string[];
   parentId?: string;
