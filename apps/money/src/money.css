@@ -586,6 +586,7 @@ svg {
   margin-top: 2px;
 }
 .envelope-meter {
+  position: relative;
   height: 4px;
   border-radius: 4px;
   background: var(--bg-hover);
@@ -597,6 +598,16 @@ svg {
   display: block;
   border-radius: inherit;
   background: #9bab79;
+}
+.envelope-meter > .envelope-meter-planned {
+  position: absolute;
+  top: 0;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, #9bab79 62%, transparent),
+    color-mix(in srgb, #9bab79 20%, transparent)
+  );
+  border-radius: 0 4px 4px 0;
 }
 .envelope-spent {
   color: var(--text-muted);
@@ -2258,6 +2269,10 @@ svg {
   margin-top: 20px;
   padding-top: 17px;
   border-top: 1px solid var(--border);
+}
+.transaction-sheet-footer-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .plan-selection-header {

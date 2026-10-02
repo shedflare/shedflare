@@ -38,12 +38,12 @@ async function setup() {
   return { env, db, accountId, categoryId, scheduleId };
 }
 describe("recurring payments", () => {
-  test("records in the chosen account/category, advances month-end date, and restores exact state when undone", async () => {
+  test("records on the supplied date, advances the due date, and restores exact state when undone", async () => {
     const { db, accountId, categoryId, scheduleId } = await setup();
     const [before] = await db.select().from(s.schedules).all();
     const result = await handleCommand(db, {
       commandType: "post_schedule_transaction",
-      payload: { scheduleId },
+      payload: { scheduleId, date: "2026-01-30" },
     });
     expect(result.ok).toBe(true);
     if (!result.ok || !result.data.transactionId) throw new Error("No payment");
@@ -51,7 +51,7 @@ describe("recurring payments", () => {
       accountId,
       categoryId,
       amount: -45_000_000,
-      date: "2026-01-31",
+      date: "2026-01-30",
       payee: "Internet",
       scheduleId,
     });

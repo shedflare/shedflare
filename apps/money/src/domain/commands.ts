@@ -265,6 +265,7 @@ export const CommandPayloadSchemas = {
 
   post_schedule_transaction: Schema.Struct({
     scheduleId: Schema.String,
+    date: Schema.optional(Schema.String),
   }),
 
   undo_schedule_payment: Schema.Struct({

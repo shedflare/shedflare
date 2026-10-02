@@ -28,7 +28,7 @@ export default function MoneyDialog(props: {
         event.preventDefault();
         if (!props.busy) props.onClose();
       }}
-      onClick={(event) => {
+      onPointerDown={(event) => {
         if (event.target !== event.currentTarget || props.busy) return;
         const bounds = event.currentTarget.getBoundingClientRect();
         if (

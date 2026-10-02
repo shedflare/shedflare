@@ -86,7 +86,7 @@ export default function AllTransactionsPage() {
   });
 
   onMount(() => {
-    onCleanup(listenForMoneyDataChanged(loadData));
+    onCleanup(listenForMoneyDataChanged(() => loadData(false)));
   });
 
   const month = createMemo(() =>
@@ -124,9 +124,9 @@ export default function AllTransactionsPage() {
   });
 
   let requestId = 0;
-  async function loadData() {
+  async function loadData(showLoading = true) {
     const request = ++requestId;
-    setLoading(true);
+    if (showLoading) setLoading(true);
     setError(null);
     try {
       const fId = filterId();

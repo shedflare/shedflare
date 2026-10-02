@@ -96,6 +96,7 @@ export default function TransactionTable(props: TransactionTableProps) {
   const [splitParentId, setSplitParentId] = createSignal<string | null>(null);
   const [splitChildren, setSplitChildren] = createSignal<SplitChild[]>([]);
   const [showTagPicker, setShowTagPicker] = createSignal<string | null>(null);
+  const [statusPending, setStatusPending] = createSignal<Set<string>>(new Set());
 
   createEffect(() => {
     if (showTagPicker()) {
@@ -141,7 +142,7 @@ export default function TransactionTable(props: TransactionTableProps) {
     commandFields: TransactionUpdateFields,
     optimisticPatch: TransactionPatch,
     undoLabel: string,
-  ) {
+  ): Promise<void> {
     const { promise } = dispatch(
       "update_transaction",
       { id: tx.id, fields: commandFields },
@@ -150,7 +151,7 @@ export default function TransactionTable(props: TransactionTableProps) {
       },
     );
     props.onTransactionPatch?.(tx.id, optimisticPatch);
-    void promise
+    return promise
       .then(() => {
         if (!props.onTransactionPatch) void props.onReload?.();
       })
@@ -197,16 +198,16 @@ export default function TransactionTable(props: TransactionTableProps) {
         return;
       }
       if (cents !== tx.amount) {
-        applyOptimisticPatch(tx, { amount: cents }, { amount: cents }, "Update amount");
+        void applyOptimisticPatch(tx, { amount: cents }, { amount: cents }, "Update amount");
       }
     } else if (field === "date") {
       if (value !== tx.date) {
-        applyOptimisticPatch(tx, { date: value }, { date: value }, "Update date");
+        void applyOptimisticPatch(tx, { date: value }, { date: value }, "Update date");
       }
     } else if (field === "payee") {
       if (value !== (tx.payee ?? "")) {
         const payee = value || null;
-        applyOptimisticPatch(tx, { payee }, { payee }, "Update payee");
+        void applyOptimisticPatch(tx, { payee }, { payee }, "Update payee");
         if (value.trim() && !tx.categoryId) {
           void fetchCategorySuggestion(tx, value.trim());
         }
@@ -214,12 +215,12 @@ export default function TransactionTable(props: TransactionTableProps) {
     } else if (field === "notes") {
       if (value !== (tx.notes ?? "")) {
         const notes = value || null;
-        applyOptimisticPatch(tx, { notes }, { notes }, "Update notes");
+        void applyOptimisticPatch(tx, { notes }, { notes }, "Update notes");
       }
     } else if (field === "category") {
       const catId = value || null;
       if (catId !== tx.categoryId) {
-        applyOptimisticPatch(
+        void applyOptimisticPatch(
           tx,
           { categoryId: catId },
           { categoryId: catId, categoryName: categoryNameFor(catId) },
@@ -235,7 +236,7 @@ export default function TransactionTable(props: TransactionTableProps) {
       const data = await api.payeeSuggestions(payee);
       if (data.suggestions.length > 0) {
         const categoryId = data.suggestions[0].category_id;
-        applyOptimisticPatch(
+        void applyOptimisticPatch(
           tx,
           { categoryId },
           { categoryId, categoryName: categoryNameFor(categoryId) },
@@ -325,14 +326,44 @@ export default function TransactionTable(props: TransactionTableProps) {
     });
   }
 
-  function toggleCleared(tx: TransactionRow) {
+  async function toggleCleared(tx: TransactionRow) {
+    if (statusPending().has(tx.id)) return;
     const cleared = !tx.cleared;
-    applyOptimisticPatch(tx, { cleared }, { cleared }, "Toggle cleared");
+    setStatusPending((current) => new Set(current).add(tx.id));
+    try {
+      await applyOptimisticPatch(
+        tx,
+        { cleared },
+        { cleared },
+        cleared ? "Marked cleared" : "Marked pending",
+      );
+    } finally {
+      setStatusPending((current) => {
+        const next = new Set(current);
+        next.delete(tx.id);
+        return next;
+      });
+    }
   }
 
-  function toggleReconciled(tx: TransactionRow) {
+  async function toggleReconciled(tx: TransactionRow) {
+    if (statusPending().has(tx.id)) return;
     const reconciled = !tx.reconciled;
-    applyOptimisticPatch(tx, { reconciled }, { reconciled }, "Toggle reconciled");
+    setStatusPending((current) => new Set(current).add(tx.id));
+    try {
+      await applyOptimisticPatch(
+        tx,
+        { reconciled },
+        { reconciled },
+        reconciled ? "Matched to statement" : "Reconciliation undone",
+      );
+    } finally {
+      setStatusPending((current) => {
+        const next = new Set(current);
+        next.delete(tx.id);
+        return next;
+      });
+    }
   }
 
   function initSplit(tx: TransactionRow) {
@@ -436,7 +467,7 @@ export default function TransactionTable(props: TransactionTableProps) {
 
       <div class="transaction-table">
         <div class="tx-table-header" classList={{ "show-account": !!props.showAccount }}>
-          <span class="tx-col-cr">C/R</span>
+          <span class="tx-col-cr">Status</span>
           <span class="tx-col-date">Date</span>
           <Show when={props.showAccount}>
             <span class="tx-col-account">Account</span>
@@ -474,12 +505,15 @@ export default function TransactionTable(props: TransactionTableProps) {
                       class="btn btn-icon btn-xs"
                       classList={{ "btn-ghost": !tx.cleared, "btn-primary": tx.cleared }}
                       style={{ padding: "2px 6px", "font-size": "0.65rem" }}
-                      onClick={() => toggleCleared(tx)}
-                      aria-label={
-                        tx.cleared ? "Mark transaction uncleared" : "Mark transaction cleared"
-                      }
+                      disabled={statusPending().has(tx.id)}
+                      onClick={() => void toggleCleared(tx)}
+                      aria-label={tx.cleared ? "Mark uncleared" : "Mark cleared"}
                       aria-pressed={tx.cleared}
-                      title={tx.cleared ? "Cleared" : "Uncleared"}
+                      title={
+                        tx.cleared
+                          ? "Cleared by the bank · click to mark pending"
+                          : "Pending at the bank · click when it clears"
+                      }
                     >
                       ✓
                     </button>
@@ -491,14 +525,15 @@ export default function TransactionTable(props: TransactionTableProps) {
                         "btn-reconciled": tx.reconciled,
                       }}
                       style={{ padding: "2px 6px", "font-size": "0.65rem" }}
-                      onClick={() => toggleReconciled(tx)}
-                      aria-label={
-                        tx.reconciled
-                          ? "Mark transaction unreconciled"
-                          : "Mark transaction reconciled"
-                      }
+                      disabled={statusPending().has(tx.id)}
+                      onClick={() => void toggleReconciled(tx)}
+                      aria-label={tx.reconciled ? "Undo reconciliation" : "Mark reconciled"}
                       aria-pressed={tx.reconciled}
-                      title={tx.reconciled ? "Reconciled" : "Not reconciled"}
+                      title={
+                        tx.reconciled
+                          ? "Matched to your statement · click to undo"
+                          : "Checked against your statement · click to reconcile"
+                      }
                     >
                       R
                     </button>

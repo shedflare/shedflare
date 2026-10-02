@@ -247,7 +247,7 @@ function PaymentDetail(props: {
       if (kind === "record") {
         await dispatch(
           "post_schedule_transaction",
-          { scheduleId: original.id },
+          { scheduleId: original.id, date: formatCalendarDate(new Date()) },
           {
             undoInfo: {
               label: "Payment recorded",

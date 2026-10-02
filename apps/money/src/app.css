@@ -3164,6 +3164,17 @@ button {
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
 }
 
+.tx-action-popover {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+@media (min-width: 768px) {
+  .activity-page .transaction-table {
+    overflow: visible;
+  }
+}
+
 .tx-action-popover button,
 .entity-menu-popover button {
   min-height: 38px;

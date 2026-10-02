@@ -123,6 +123,47 @@ export default function TransactionDrawer(props: {
       setBusy(false);
     }
   }
+  async function remove() {
+    if (busy() || special) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await dispatch(
+        "delete_transaction",
+        { id: original.id },
+        {
+          undoInfo: {
+            label: "Transaction deleted",
+            inverse: {
+              commandType: "create_transaction",
+              payload: {
+                row: {
+                  accountId: original.accountId,
+                  date: original.date,
+                  amount: original.amount,
+                  payee: original.payee ?? undefined,
+                  notes: original.notes ?? undefined,
+                  categoryId: original.categoryId,
+                  cleared: original.cleared,
+                  reconciled: original.reconciled,
+                  isParent: original.isParent,
+                  isChild: original.isChild,
+                  parentId: original.parentId,
+                  scheduleId: original.scheduleId,
+                },
+              },
+            },
+          },
+        },
+      ).promise;
+      emitMoneyDataChanged();
+      props.onClose();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not delete transaction");
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <MoneyDialog
       title={special ? "Transaction details" : "Edit transaction"}
@@ -354,9 +395,14 @@ export default function TransactionDrawer(props: {
             Open ledger
           </button>
           <Show when={!special}>
-            <button type="submit" class="btn btn-primary" disabled={busy()}>
-              {busy() ? "Saving…" : "Save changes"}
-            </button>
+            <div class="transaction-sheet-footer-actions">
+              <button type="button" class="btn btn-danger" disabled={busy()} onClick={remove}>
+                Delete
+              </button>
+              <button type="submit" class="btn btn-primary" disabled={busy()}>
+                {busy() ? "Saving…" : "Save changes"}
+              </button>
+            </div>
           </Show>
         </div>
       </form>

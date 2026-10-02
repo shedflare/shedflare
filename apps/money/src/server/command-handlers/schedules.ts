@@ -236,7 +236,7 @@ export async function handleScheduleCommands(
             .where(eq(s.payees.id, schedule.payeeId))
             .all()
         : [];
-      const paymentDate = schedule.nextDate ?? schedule.startDate ?? toDateOnly(new Date());
+      const paymentDate = pp.date ?? toDateOnly(new Date());
       if (!parseCalendarDate(paymentDate))
         return { ok: false, error: "Choose a valid payment date" };
       const transaction = createTransaction({

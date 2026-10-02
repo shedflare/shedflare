@@ -20,6 +20,9 @@ import CategoryDrawer from "../components/CategoryDrawer";
 import CategoryBadge from "../components/CategoryBadge";
 import MoneySetup from "../components/MoneySetup";
 import { readSetupState } from "../domain/setup";
+import type { SchedulesResponse } from "../domain/schemas-client";
+
+type ScheduleRow = SchedulesResponse["schedules"][number];
 
 export default function Dashboard() {
   const shell = useMoneyShell();
@@ -99,6 +102,27 @@ export default function Dashboard() {
       .sort((left, right) => (left.nextDate ?? "").localeCompare(right.nextDate ?? ""))
       .slice(0, 4),
   );
+  const plannedByCategory = createMemo(() => {
+    const today = formatCalendarDate(new Date());
+    const planned = new Map<string, ScheduleRow[]>();
+    for (const schedule of schedules()?.schedules ?? []) {
+      if (
+        !schedule.active ||
+        schedule.completed ||
+        !schedule.categoryId ||
+        !schedule.nextDate ||
+        schedule.nextDate <= today ||
+        schedule.nextDate.slice(0, 7) !== month ||
+        schedule.amount === null ||
+        schedule.amount >= 0
+      )
+        continue;
+      const current = planned.get(schedule.categoryId) ?? [];
+      current.push(schedule);
+      planned.set(schedule.categoryId, current);
+    }
+    return planned;
+  });
   const selected = createMemo(() =>
     categories().find((category) => category.categoryId === params.category),
   );
@@ -278,40 +302,86 @@ export default function Dashboard() {
                 >
                   <div class="envelope-grid">
                     <For each={visible()}>
-                      {(category) => (
-                        <button
-                          type="button"
-                          class="envelope-card"
-                          classList={{ "is-overspent": category.leftover < 0 }}
-                          onClick={() => setParams({ category: category.categoryId })}
-                          aria-label={`${category.categoryName}, ${fmt().formatCents(category.leftover)} available`}
-                        >
-                          <div class="envelope-card-top">
-                            <CategoryBadge
-                              name={category.categoryName}
-                              icon={
-                                data()?.definitions.find(
-                                  (definition) => definition.id === category.categoryId,
-                                )?.icon
-                              }
-                            />
-                            <MoneyIcon name="arrow" size={17} />
-                          </div>
-                          <span class="envelope-name">{category.categoryName}</span>
-                          <strong class={`envelope-amount ${privacy().blurClass()}`}>
-                            {fmt().formatCents(category.leftover)}
-                          </strong>
-                          <span class="envelope-label">
-                            {category.leftover < 0 ? "Overspent" : "Available"}
-                          </span>
-                          <div class="envelope-meter">
-                            <span style={{ width: `${availableRatio(category) * 100}%` }} />
-                          </div>
-                          <span class={`envelope-spent ${privacy().blurClass()}`}>
-                            {fmt().formatCents(Math.max(0, -category.spent))} spent
-                          </span>
-                        </button>
-                      )}
+                      {(category) =>
+                        (() => {
+                          const planned = () => plannedByCategory().get(category.categoryId) ?? [];
+                          const plannedAmount = () =>
+                            planned().reduce(
+                              (total, payment) => total + Math.abs(payment.amount!),
+                              0,
+                            );
+                          const ratio = () => availableRatio(category);
+                          const plannedRatio = () => {
+                            const capacity = category.leftover - category.spent;
+                            return capacity > 0 ? Math.min(ratio(), plannedAmount() / capacity) : 0;
+                          };
+                          const tooltip = () =>
+                            planned()
+                              .map((payment) =>
+                                [
+                                  payment.name ?? "Scheduled payment",
+                                  df().formatDate(payment.nextDate!),
+                                  privacy().enabled ? null : fmt().formatCents(payment.amount!),
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · "),
+                              )
+                              .join("\n");
+                          return (
+                            <button
+                              type="button"
+                              class="envelope-card"
+                              classList={{ "is-overspent": category.leftover < 0 }}
+                              onClick={() => setParams({ category: category.categoryId })}
+                              aria-label={`${category.categoryName}, ${fmt().formatCents(category.leftover)} available`}
+                            >
+                              <div class="envelope-card-top">
+                                <CategoryBadge
+                                  name={category.categoryName}
+                                  icon={
+                                    data()?.definitions.find(
+                                      (definition) => definition.id === category.categoryId,
+                                    )?.icon
+                                  }
+                                />
+                                <MoneyIcon name="arrow" size={17} />
+                              </div>
+                              <span class="envelope-name">{category.categoryName}</span>
+                              <strong class={`envelope-amount ${privacy().blurClass()}`}>
+                                {fmt().formatCents(category.leftover)}
+                              </strong>
+                              <span class="envelope-label">
+                                {category.leftover < 0 ? "Overspent" : "Available"}
+                              </span>
+                              <div
+                                class="envelope-meter"
+                                role={plannedAmount() > 0 ? "img" : undefined}
+                                title={tooltip() || undefined}
+                                aria-label={
+                                  tooltip() ? `Upcoming payments: ${tooltip()}` : undefined
+                                }
+                              >
+                                <span
+                                  class="envelope-meter-fill"
+                                  style={{ width: `${(ratio() - plannedRatio()) * 100}%` }}
+                                />
+                                <Show when={plannedAmount() > 0}>
+                                  <span
+                                    class="envelope-meter-planned"
+                                    style={{
+                                      left: `${(ratio() - plannedRatio()) * 100}%`,
+                                      width: `${plannedRatio() * 100}%`,
+                                    }}
+                                  />
+                                </Show>
+                              </div>
+                              <span class={`envelope-spent ${privacy().blurClass()}`}>
+                                {fmt().formatCents(Math.max(0, -category.spent))} spent
+                              </span>
+                            </button>
+                          );
+                        })()
+                      }
                     </For>
                   </div>
                 </Show>
