@@ -49,9 +49,10 @@ cli
   .command("deploy [app]", "Deploy apps via Alchemy")
   .option("--yes", "Skip confirmation prompts")
   .option("--secret <pair>", "Set secret for deploy: NAME=value (repeatable)")
-  .action(async (app: string | undefined, options: { yes?: boolean }) => {
+  .option("--profile <name>", "Alchemy auth profile (defaults to Alchemy's 'default' profile)")
+  .action(async (app: string | undefined, options: { yes?: boolean; profile?: string }) => {
     const { deployCommand } = await import("./commands/deploy.js");
-    await deployCommand({ app, yes: options.yes });
+    await deployCommand({ app, yes: options.yes, profile: options.profile });
   });
 
 cli

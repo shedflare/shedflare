@@ -263,14 +263,30 @@ export async function promptMissingSecrets(
   return values;
 }
 
+/**
+ * Values present before a deploy injected a secret. Deploys load the repository
+ * `.env` first, so clearing must restore what was already there instead of
+ * deleting operator-provided values.
+ */
+const injectedSecretValues = new Map<string, string | undefined>();
+
 export function applySecretsToEnv(secrets: Record<string, string>): void {
   for (const [name, value] of Object.entries(secrets)) {
+    if (!injectedSecretValues.has(name)) {
+      injectedSecretValues.set(name, process.env[name]);
+    }
     process.env[name] = value;
   }
 }
 
 export function clearSecretsFromEnv(names: string[]): void {
   for (const name of names) {
-    delete process.env[name];
+    const previous = injectedSecretValues.get(name);
+    if (previous === undefined) {
+      delete process.env[name];
+    } else {
+      process.env[name] = previous;
+    }
+    injectedSecretValues.delete(name);
   }
 }

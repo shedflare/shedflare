@@ -1,18 +1,56 @@
 import spawn from "nano-spawn";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { loadManifest, isAppId, type AppId } from "../core/manifests.js";
 import { isAppSelected, loadConfig, validateConfig } from "../core/config.js";
 import { parseSecretFlags, applySecretsToEnv, clearSecretsFromEnv } from "./secret.js";
 import { discoverManifests, findRepoRoot, resolveDeploymentStage } from "@shedflare/core";
+import { loadRepoDotEnv } from "@shedflare/alchemy";
 
 export interface DeployOptions {
   app?: string;
   yes?: boolean;
+  profile?: string;
+}
+
+export interface AlchemyDeployInvocation {
+  readonly target: string;
+  readonly stage: string;
+  /** Absolute path to the repository `.env`, passed so Alchemy does not depend on the caller's cwd. */
+  readonly envFile?: string;
+  /** Alchemy auth profile name. Defaults to Alchemy's own `default` profile. */
+  readonly profile?: string;
+}
+
+/**
+ * Build the Alchemy argument list. `--env-file` must only be passed when a real
+ * file exists: Alchemy's `loadConfigProvider` skips its automatic `.env` branch
+ * whenever the flag is present, so passing an empty file silently hides the
+ * repository environment from every config lookup.
+ */
+export function alchemyDeployArgs({
+  target,
+  stage,
+  envFile,
+  profile,
+}: AlchemyDeployInvocation): string[] {
+  return [
+    "exec",
+    "alchemy",
+    "deploy",
+    target,
+    "--stage",
+    stage,
+    ...(envFile ? ["--env-file", envFile] : []),
+    ...(profile ? ["--profile", profile] : []),
+    "--yes",
+  ];
 }
 
 export async function deployCommand(options: DeployOptions): Promise<void> {
+  const repoRoot = findRepoRoot();
+  loadRepoDotEnv(repoRoot);
+
   if (options.app === "drive") {
     console.error(
       "Drive has an independent production lifecycle and is unavailable through the suite deploy command. Use its scoped workspace deployment command only with explicit production approval.",
@@ -61,7 +99,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     process.exit(1);
   }
 
-  const catalog = discoverManifests(findRepoRoot());
+  const catalog = discoverManifests(repoRoot);
   const stage = selectedApp ? resolveDeploymentStage(validConfig, catalog, selectedApp) : "prod";
   if (
     !selectedApp &&
@@ -89,9 +127,8 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
   }
 
   applySecretsToEnv(flagSecrets);
-  const emptyEnvDirectory = mkdtempSync(join(tmpdir(), "shedflare-deploy-"));
-  const emptyEnvFile = join(emptyEnvDirectory, "empty.env");
-  writeFileSync(emptyEnvFile, "", { encoding: "utf8", mode: 0o600 });
+
+  const repoEnvFile = join(repoRoot, ".env");
 
   try {
     const target = options.app ? `apps/${options.app}/alchemy.run.ts` : "alchemy.run.ts";
@@ -99,13 +136,17 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     console.log(`Deploying via Alchemy: ${target}...`);
     await spawn(
       "vp",
-      ["exec", "alchemy", "deploy", target, "--stage", stage, "--env-file", emptyEnvFile, "--yes"],
+      alchemyDeployArgs({
+        target,
+        stage,
+        envFile: existsSync(repoEnvFile) ? repoEnvFile : undefined,
+        profile: options.profile,
+      }),
       {
         stdio: "inherit",
       },
     );
   } finally {
     clearSecretsFromEnv([...allRequiredSecrets]);
-    rmSync(emptyEnvDirectory, { force: true, recursive: true });
   }
 }
