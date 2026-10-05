@@ -6,33 +6,29 @@ Currently built as a Cloudflare Worker-backed SolidJS SPA with REST APIs, D1 SQL
 
 Durable Objects, WebSocket sync, TanStack DB collections, and IndexedDB offline snapshots are target architecture ideas from the replacement plan, not shipped behavior today.
 
-Home is the everyday view: category balances, quick expense entry, recent activity, and upcoming
-payments. Budget is the monthly planning view: allocations, targets, and money held for next month.
-Open a category from either view to record spending, assign money, move funds, or edit its target.
-Moving money commits both sides together and supports undo.
+Money has two working views. **Overview** is what happened: the month's money in/out, net, what's
+left in categories, net worth, and alerts (overspent, to assign, to categorize, overdue), above the
+full searchable activity feed/ledger. Its side rail lists accounts, upcoming payments with one-click
+Record, and spending by category; click an account or category to filter the activity in place.
+**Plan** is the month ahead: a budget grid with assigned (editable inline), spent, available,
+scheduled payments still due, last month, and targets, plus recurring payments and a six-month
+cash-flow trend beside it. Open a category from either view to record spending, assign money, move
+funds, or edit its target. Moving money commits both sides together and supports undo.
 
 Fresh installs offer a skippable setup: currency, first account and opening balance, then editable
 starter categories with icons. Everything saves together, with drafts retained for retry.
 
-Reports opens a monthly view with income, expenses, and category spending. Small percentage
-comparisons show changes from the previous month; selecting a category opens its Activity. Net
-worth is a secondary view, and advanced reports remain in the menu.
-
-Activity groups transactions by date, with monthly totals, search, and a tap-to-edit drawer.
-The ledger toggle keeps splits, tags, and advanced editing available. Budget shows one editable
-amount per category. Reveal a category's previous month to see its amounts and usage bar, or copy
-that amount with undo. Whole-month copying and Fund targets are in the actions menu. Current
-spending and available balances live in the everyday views. Copying replaces the destination
-assignment; subsequent edits use the same inputs.
+Reports is the deep dive: a monthly view with category comparisons, net worth, and advanced and
+custom reports. The ledger toggle in Overview keeps splits, tags, and advanced editing available.
 
 Accounts open on their balance and activity. Transfer moves money between two accounts, with both
 entries saved together and one undo step. Ledger, import, reconciliation, rename, and close/reopen
 are in the account menu. Reconciliation uses the cleared balance and saves its adjustment together.
 
-Recurring lists payment names, next dates, and amounts. Open one to record or skip a payment;
-Edit, Pause, and Archive are in its menu. The form includes account, category, next date, and
-optional recurrence details. Discovery opens a prefilled draft. Recording saves the transaction and
-next date together; undo restores both. Failed saves keep the draft available for retry.
+Recurring payments sit in Plan, grouped as overdue, due this month (with repeat counts), and later.
+Record or skip inline, or open one for Edit, Pause, and Archive. The form includes account,
+category, next date, and optional recurrence details. Discovery opens a prefilled draft. Recording
+saves the transaction and next date together; undo restores both. Failed saves keep the draft.
 
 Indonesian rupiah is supported throughout the budget: choose it in Settings → Currency.
 Automatic number formatting uses `Rp1.250.000`, with whole-rupiah entry and grouped amounts in
@@ -117,14 +113,15 @@ Shedflare Money is a zero-based budgeting (envelope budgeting) app for personal 
 - **Rule test UI** — preview which existing transactions would match a rule
 - **CSV import** — parse and review files, map columns when needed, skip account-scoped duplicates, and insert atomically with safe retry and undo
 
-### Home & Reports
+### Overview, Plan & Reports
 
-- **Home** — available category balances, overspending, quick entry, recent activity, and scheduled payments
+- **Overview** — month totals, alerts, filterable activity, accounts, category spending, and upcoming payments
+- **Plan** — budget grid with spending, availability, scheduled payments, last month, and targets beside recurring payments and cash flow
 - **Built-in reports** — net worth history, cash flow, spending breakdown, budget analysis, age of money
 - **Custom reports** — save reports with filter conditions, grouping, sorting, and graph types
 
-Home replaces the configurable widget dashboard. Existing widget records and dashboard APIs remain
-in D1, but the old dashboard grid and its layout import/export controls are not part of the Home UI.
+Overview replaces the configurable widget dashboard. Existing widget records and dashboard APIs remain
+in D1, but the old dashboard grid and its layout import/export controls are not part of the Overview UI.
 
 ### Sync & Offline
 

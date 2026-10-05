@@ -1,22 +1,20 @@
 import { createSignal, createEffect, createMemo, onCleanup, onMount, Show } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
-import TransactionFilters from "../components/TransactionFilters";
-import TransactionTable from "../components/TransactionTable";
-import ActivityFeed from "../components/ActivityFeed";
-import TransactionDrawer from "../components/TransactionDrawer";
+import TransactionFilters from "./TransactionFilters";
+import TransactionTable from "./TransactionTable";
+import ActivityFeed from "./ActivityFeed";
+import TransactionDrawer from "./TransactionDrawer";
 import { activityEntries, activityTotals, filterActivity } from "../lib/activity-view";
-import { currentMonthKey, shiftMonth } from "../lib/budget-view";
-import { useDateFormat } from "../lib/date-format";
 import { useCurrency } from "../lib/currency";
 import { usePrivacyMode } from "../lib/privacy";
-import { PageState } from "../components/PageState";
-import { useMoneyShell } from "../components/MoneyShellContext";
-import MoneyIcon from "../components/MoneyIcon";
+import { PageState } from "./PageState";
+import { useMoneyShell } from "./MoneyShellContext";
+import MoneyIcon from "./MoneyIcon";
 import { dispatch, requireCommandId } from "../lib/pending-ops";
 import { api } from "../lib/api";
 import { listenForMoneyDataChanged } from "../lib/data-events";
-import type { TransactionRow } from "../components/TransactionTable";
-import type { Condition } from "../components/TransactionFilters";
+import type { TransactionRow } from "./TransactionTable";
+import type { Condition } from "./TransactionFilters";
 import type {
   AccountsResponse,
   CategoriesResponse,
@@ -52,19 +50,26 @@ function toTransactionRow(tx: ApiTransactionRow): TransactionRow {
   };
 }
 
-export default function AllTransactionsPage() {
+export type ActivityParams = {
+  q?: string;
+  view?: string;
+  category?: string;
+  account?: string;
+  month?: string;
+  focus?: string;
+};
+
+/** Searchable feed/ledger for one month (or all time when `month` is null), driven by URL filters. */
+export default function ActivityPanel(props: {
+  month: string | null;
+  /** Receives the full unfiltered transaction list whenever it is (re)loaded without server filters. */
+  onLoaded?: (rows: readonly ApiTransactionRow[]) => void;
+}) {
   const shell = useMoneyShell();
   const fmt = useCurrency();
   const privacy = usePrivacyMode();
-  const df = useDateFormat();
   const [ledger, setLedger] = createSignal(false);
-  const [searchParams, setSearchParams] = useSearchParams<{
-    q?: string;
-    view?: string;
-    category?: string;
-    month?: string;
-    focus?: string;
-  }>();
+  const [searchParams, setSearchParams] = useSearchParams<ActivityParams>();
   const [transactions, setTransactions] = createSignal<ApiTransactionRow[]>([]);
   const [categories, setCategories] = createSignal<CategoryRow[]>([]);
   const [tagList, setTagList] = createSignal<TagRow[]>([]);
@@ -89,17 +94,11 @@ export default function AllTransactionsPage() {
     onCleanup(listenForMoneyDataChanged(() => loadData(false)));
   });
 
-  const month = createMemo(() =>
-    searchParams.month === "all"
-      ? null
-      : /^\d{4}-(0[1-9]|1[0-2])$/.test(searchParams.month ?? "")
-        ? searchParams.month!
-        : currentMonthKey(),
-  );
   const visibleTransactions = createMemo(() =>
     filterActivity(transactions(), {
-      month: month(),
+      month: props.month,
       category: searchParams.category,
+      account: searchParams.account,
       view: searchParams.view,
       query: searchQuery(),
     }),
@@ -145,6 +144,7 @@ export default function AllTransactionsPage() {
       ]);
       if (request !== requestId) return;
       setTransactions([...data.transactions]);
+      if (!fId && !conditions.length) props.onLoaded?.(data.transactions);
       setCategories([...categoryData.categories]);
       setAccounts([...accountData.accounts]);
       setTagList([...tagData.tags]);
@@ -165,6 +165,15 @@ export default function AllTransactionsPage() {
   const totals = createMemo(() =>
     activityTotals(visibleTransactions(), Boolean(searchParams.category)),
   );
+  const filtered = () =>
+    Boolean(
+      searchQuery() ||
+      searchParams.category ||
+      searchParams.account ||
+      searchParams.view ||
+      filterId() ||
+      filterConditions().length,
+    );
 
   function accountNames() {
     const map: Record<string, string> = {};
@@ -197,95 +206,34 @@ export default function AllTransactionsPage() {
   }
 
   return (
-    <div class="page activity-page">
-      <div class="page-header">
-        <div>
-          <h1 class="page-title">Activity</h1>
-        </div>
-        <div class="page-actions">
-          <button
-            class="btn btn-secondary btn-sm"
-            aria-pressed={ledger()}
-            onClick={() => {
-              setLedger(!ledger());
-              setSearchParams({ focus: undefined }, { replace: true });
+    <section class="activity-panel">
+      <div class="activity-panel-toolbar">
+        <div class="transaction-search">
+          <MoneyIcon name="search" size={17} />
+          <input
+            type="search"
+            aria-label="Search transactions"
+            placeholder="Search payee, notes, category, account"
+            value={searchQuery()}
+            onInput={(event) => {
+              const query = event.currentTarget.value;
+              setSearchQuery(query);
+              setSearchParams({ q: query.trim() || undefined }, { replace: true });
             }}
-          >
-            <MoneyIcon name="activity" size={16} />
-            {ledger() ? "Feed" : "Ledger"}
-          </button>
-          <button class="btn btn-primary btn-sm" onClick={() => shell.openTransaction()}>
-            <MoneyIcon name="plus" />
-            Add
-          </button>
+          />
+          <Show when={searchQuery()}>
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm"
+              onClick={() => {
+                setSearchQuery("");
+                setSearchParams({ q: undefined }, { replace: true });
+              }}
+            >
+              Clear
+            </button>
+          </Show>
         </div>
-      </div>
-
-      <div class="activity-period">
-        <div class="month-nav">
-          <button
-            class="btn btn-icon btn-ghost"
-            aria-label="Previous activity month"
-            onClick={() => setSearchParams({ month: shiftMonth(month() ?? currentMonthKey(), -1) })}
-          >
-            ‹
-          </button>
-          <h2>{month() ? df().formatMonth(month()!) : "All time"}</h2>
-          <button
-            class="btn btn-icon btn-ghost"
-            aria-label="Next activity month"
-            onClick={() => setSearchParams({ month: shiftMonth(month() ?? currentMonthKey(), 1) })}
-          >
-            ›
-          </button>
-        </div>
-        <button
-          class="text-button"
-          onClick={() => setSearchParams({ month: month() ? "all" : undefined })}
-        >
-          {month() ? "All time" : "This month"}
-        </button>
-      </div>
-      <Show when={!loading() && !error() && visibleTransactions().length}>
-        <div class="activity-summary">
-          <div>
-            <span>Money out</span>
-            <strong class={privacy().blurClass()}>{fmt().formatCents(totals().expense)}</strong>
-          </div>
-          <div>
-            <span>Money in</span>
-            <strong class={privacy().blurClass()}>{fmt().formatCents(totals().income)}</strong>
-          </div>
-        </div>
-      </Show>
-      <div class="transaction-search">
-        <MoneyIcon name="search" size={18} />
-        <input
-          type="search"
-          aria-label="Search transactions"
-          placeholder="Search activity"
-          value={searchQuery()}
-          onInput={(event) => {
-            const query = event.currentTarget.value;
-            setSearchQuery(query);
-            setSearchParams({ q: query.trim() || undefined }, { replace: true });
-          }}
-        />
-        <Show when={searchQuery()}>
-          <button
-            type="button"
-            class="btn btn-ghost btn-sm"
-            onClick={() => {
-              setSearchQuery("");
-              setSearchParams({ q: undefined }, { replace: true });
-            }}
-          >
-            Clear
-          </button>
-        </Show>
-      </div>
-
-      <div class="activity-controls">
         <div class="filter-chips" aria-label="Activity views">
           <button
             classList={{ active: !searchParams.view }}
@@ -297,13 +245,13 @@ export default function AllTransactionsPage() {
             classList={{ active: searchParams.view === "expenses" }}
             onClick={() => setSearchParams({ view: "expenses" })}
           >
-            Expenses
+            Out
           </button>
           <button
             classList={{ active: searchParams.view === "income" }}
             onClick={() => setSearchParams({ view: "income" })}
           >
-            Income
+            In
           </button>
           <button
             classList={{ active: searchParams.view === "uncategorized" }}
@@ -312,30 +260,58 @@ export default function AllTransactionsPage() {
             Uncategorized
           </button>
         </div>
+        <button
+          class="btn btn-secondary btn-sm"
+          aria-pressed={ledger()}
+          onClick={() => {
+            setLedger(!ledger());
+            setSearchParams({ focus: undefined }, { replace: true });
+          }}
+          title={ledger() ? "Switch to the grouped feed" : "Switch to the editable ledger"}
+        >
+          <MoneyIcon name="activity" size={15} />
+          {ledger() ? "Feed" : "Ledger"}
+        </button>
       </div>
 
-      <Show when={searchParams.category}>
-        <div class="active-view-chip">
-          {[categories().find((category) => category.id === searchParams.category)?.name]
-            .filter(Boolean)
-            .join(" · ")}
-          <button
-            type="button"
-            aria-label="Show all transactions"
-            onClick={() =>
-              setSearchParams({ category: undefined, focus: undefined }, { replace: true })
-            }
-          >
-            ×
-          </button>
-        </div>
-      </Show>
-
-      <div class="activity-filter-tools">
-        <span>{activityEntries(visibleTransactions()).length} transactions</span>
+      <div class="activity-panel-filters">
+        <Show when={searchParams.account}>
+          <div class="active-view-chip">
+            {accounts().find((account) => account.id === searchParams.account)?.name ?? "Account"}
+            <button
+              type="button"
+              aria-label="Show every account"
+              onClick={() => setSearchParams({ account: undefined }, { replace: true })}
+            >
+              ×
+            </button>
+          </div>
+        </Show>
+        <Show when={searchParams.category}>
+          <div class="active-view-chip">
+            {categories().find((category) => category.id === searchParams.category)?.name ??
+              "Category"}
+            <button
+              type="button"
+              aria-label="Show every category"
+              onClick={() => setSearchParams({ category: undefined }, { replace: true })}
+            >
+              ×
+            </button>
+          </div>
+        </Show>
+        <span class={`activity-panel-count ${privacy().blurClass()}`}>
+          {activityEntries(visibleTransactions()).length} transactions
+          <Show when={!loading() && !error() && visibleTransactions().length}>
+            {" · "}
+            <span>{fmt().formatCents(totals().expense)} out</span>
+            {" · "}
+            <span class="money-in">+{fmt().formatCents(totals().income)} in</span>
+          </Show>
+        </span>
         <details class="activity-advanced">
           <summary>
-            <MoneyIcon name="settings" size={16} />
+            <MoneyIcon name="settings" size={15} />
             Filters
             <Show when={filterConditions().length}>
               <span>({filterConditions().length})</span>
@@ -362,29 +338,20 @@ export default function AllTransactionsPage() {
               <span class="money-empty-icon">
                 <MoneyIcon name="activity" size={32} />
               </span>
-              <h2>
-                {searchQuery() ||
-                searchParams.category ||
-                searchParams.view ||
-                filterId() ||
-                filterConditions().length
-                  ? "No matching activity"
-                  : "No activity yet"}
-              </h2>
+              <h2>{filtered() ? "No matching activity" : "Nothing happened this month"}</h2>
               <Show
-                when={
-                  !searchQuery() &&
-                  !searchParams.category &&
-                  !searchParams.view &&
-                  !filterId() &&
-                  !filterConditions().length
-                }
+                when={!filtered()}
                 fallback={
                   <button
                     class="btn btn-secondary"
                     onClick={() => {
                       setSearchQuery("");
-                      setSearchParams({ q: undefined, category: undefined, view: undefined });
+                      setSearchParams({
+                        q: undefined,
+                        category: undefined,
+                        account: undefined,
+                        view: undefined,
+                      });
                       handleFilterChange([], "and", null);
                     }}
                   >
@@ -479,6 +446,6 @@ export default function AllTransactionsPage() {
           />
         )}
       </Show>
-    </div>
+    </section>
   );
 }

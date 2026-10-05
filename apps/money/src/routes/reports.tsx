@@ -236,8 +236,8 @@ export default function ReportsPage() {
                       class="report-spending-row"
                       href={
                         row.categoryId
-                          ? `/transactions?month=${month()}&category=${encodeURIComponent(row.categoryId)}`
-                          : `/transactions?month=${month()}&view=uncategorized`
+                          ? `/?month=${month()}&category=${encodeURIComponent(row.categoryId)}`
+                          : `/?month=${month()}&view=uncategorized`
                       }
                       aria-label={`${row.name}, ${fmt().formatCents(row.amount)}, open activity`}
                     >

@@ -5,15 +5,17 @@ import { clearAuthHint, readAuthHint } from "@shedflare/auth-client/client";
 import "./app.css";
 import "./money.css";
 
-// Lazy-load route components
-import Dashboard from "./routes/index";
-import BudgetPage from "./routes/budget";
+import Overview from "./routes/index";
+import PlanPage from "./routes/plan";
 import AccountsPage from "./routes/accounts";
 import AccountPage from "./routes/account";
-import AllTransactionsPage from "./routes/transactions";
 import ReportsPage from "./routes/reports";
-import SchedulesPage from "./routes/schedules";
-import ScheduleDetailPage from "./routes/schedule";
+import {
+  BudgetRedirect,
+  ScheduleRedirect,
+  SchedulesRedirect,
+  TransactionsRedirect,
+} from "./routes/redirects";
 import PayeesPage from "./routes/payees";
 import RulesPage from "./routes/rules";
 import TagsPage from "./routes/tags";
@@ -121,14 +123,15 @@ export default function App() {
         }
       >
         <Router root={Layout}>
-          <Route path="/" component={Dashboard} />
-          <Route path="/budget" component={BudgetPage} />
+          <Route path="/" component={Overview} />
+          <Route path="/plan" component={PlanPage} />
           <Route path="/accounts" component={AccountsPage} />
           <Route path="/accounts/:id" component={AccountPage} />
-          <Route path="/transactions" component={AllTransactionsPage} />
           <Route path="/reports" component={ReportsPage} />
-          <Route path="/schedules" component={SchedulesPage} />
-          <Route path="/schedules/:id" component={ScheduleDetailPage} />
+          <Route path="/budget" component={BudgetRedirect} />
+          <Route path="/transactions" component={TransactionsRedirect} />
+          <Route path="/schedules" component={SchedulesRedirect} />
+          <Route path="/schedules/:id" component={ScheduleRedirect} />
           <Route path="/payees" component={PayeesPage} />
           <Route path="/categories" component={CategoriesPage} />
           <Route path="/rules" component={RulesPage} />

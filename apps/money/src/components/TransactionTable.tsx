@@ -587,7 +587,7 @@ export default function TransactionTable(props: TransactionTableProps) {
                         aria-label={`Open schedule ${tx.scheduleName ?? "Unknown"}`}
                         onClick={(e) => {
                           e.stopPropagation();
-                          navigate(`/schedules?focus=${encodeURIComponent(tx.scheduleId ?? "")}`);
+                          navigate(`/plan?payment=${encodeURIComponent(tx.scheduleId ?? "")}`);
                         }}
                       >
                         ↻

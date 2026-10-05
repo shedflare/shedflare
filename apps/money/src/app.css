@@ -2661,26 +2661,9 @@ button {
   padding-top: 76px;
 }
 
-.sidebar-more {
-  margin-top: 4px;
-}
-
-.sidebar-more > summary {
-  cursor: pointer;
-  list-style: none;
-}
-
-.sidebar-more > summary::-webkit-details-marker,
 .entity-menu > summary::-webkit-details-marker,
 .tx-action-menu > summary::-webkit-details-marker {
   display: none;
-}
-
-.sidebar-more-items {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-top: 2px;
 }
 
 .nav-item-secondary {

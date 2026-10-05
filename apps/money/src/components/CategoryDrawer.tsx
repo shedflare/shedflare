@@ -368,10 +368,10 @@ export default function CategoryDrawer(props: {
                 type="button"
                 class="text-button"
                 onClick={() => {
-                  navigate(
-                    `/transactions?category=${encodeURIComponent(props.category.categoryId)}&month=${props.month}`,
-                  );
                   props.onClose();
+                  navigate(
+                    `/?category=${encodeURIComponent(props.category.categoryId)}&month=${props.month}`,
+                  );
                 }}
               >
                 View all <MoneyIcon name="arrow" size={15} />
@@ -404,8 +404,10 @@ export default function CategoryDrawer(props: {
                           type="button"
                           class="daily-activity-row"
                           onClick={() => {
-                            navigate(`/transactions?focus=${encodeURIComponent(transaction.id)}`);
                             props.onClose();
+                            navigate(
+                              `/?month=${transaction.date.slice(0, 7)}&focus=${encodeURIComponent(transaction.id)}`,
+                            );
                           }}
                         >
                           <span>

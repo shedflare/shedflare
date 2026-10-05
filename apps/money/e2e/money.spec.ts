@@ -150,15 +150,12 @@ test.describe("Money E2E", () => {
     expect(balancedAccount.balanceCurrent).toBe(startingBalanceCents + transactionCents);
 
     // ── Step 6: Set budget via UI, verify via API ──
-    await page.goto("/budget", { waitUntil: "networkidle" });
-    await expect(page.getByRole("heading", { name: "Budget" })).toBeVisible({ timeout: 10_000 });
+    await page.goto("/plan", { waitUntil: "networkidle" });
+    await expect(page.getByRole("heading", { name: "Plan" })).toBeVisible({ timeout: 10_000 });
 
-    const budgetRow = page
-      .locator(".budget-row", { hasText: categoryName })
-      .filter({ has: page.locator("input.budget-input") });
-    await expect(budgetRow).toBeVisible({ timeout: 15_000 });
+    const budgetInput = page.getByRole("textbox", { name: `Budget for ${categoryName}` });
+    await expect(budgetInput).toBeVisible({ timeout: 15_000 });
 
-    const budgetInput = budgetRow.locator("input.budget-input");
     await budgetInput.fill("500.00");
     await budgetInput.blur();
 
@@ -499,11 +496,12 @@ test.describe("Money E2E", () => {
     if (!link) throw new Error("Expected tag to be attached to the transaction");
     expect(link.tagName).toBe(tagName);
 
-    // Verify the tag appears in the Transactions page table.
-    await page.goto("/transactions", { waitUntil: "networkidle" });
-    await expect(page.getByRole("heading", { name: "All Transactions" })).toBeVisible({
+    // Verify the tag appears in the Overview activity.
+    await page.goto("/", { waitUntil: "networkidle" });
+    await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible({
       timeout: 10_000,
     });
+    await page.getByRole("button", { name: "Ledger" }).click();
     await expect(page.getByText(tagName).first()).toBeVisible({ timeout: 10_000 });
 
     // Remove tag from transaction

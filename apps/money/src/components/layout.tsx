@@ -18,7 +18,6 @@ interface NavItem {
   path: string;
   label: string;
   icon: MoneyIconName;
-  activePaths?: string[];
 }
 
 type AccountRow = Pick<AccountsResponse["accounts"][number], "id" | "name" | "closed">;
@@ -28,16 +27,9 @@ type CategoryRow = Pick<CategoriesResponse["categories"][number], "id" | "name">
 };
 
 const PRIMARY_NAV: NavItem[] = [
-  { path: "/", label: "Home", icon: "home" },
-  { path: "/budget", label: "Budget", icon: "budget" },
-  { path: "/transactions", label: "Activity", icon: "activity" },
+  { path: "/", label: "Overview", icon: "home" },
+  { path: "/plan", label: "Plan", icon: "budget" },
   { path: "/accounts", label: "Accounts", icon: "accounts" },
-  {
-    path: "/schedules",
-    label: "Recurring",
-    icon: "calendar",
-    activePaths: ["/schedules"],
-  },
 ];
 
 const SECONDARY_NAV: NavItem[] = [
@@ -54,11 +46,11 @@ type MobileNavItem =
   | { kind: "add"; label: string; icon: MoneyIconName };
 
 const MOBILE_BOTTOM_NAV: MobileNavItem[] = [
-  { kind: "route", path: "/", label: "Home", icon: "home" },
-  { kind: "route", path: "/budget", label: "Budget", icon: "budget" },
+  { kind: "route", path: "/", label: "Overview", icon: "home" },
+  { kind: "route", path: "/plan", label: "Plan", icon: "budget" },
   { kind: "add", label: "Add", icon: "plus" },
-  { kind: "route", path: "/transactions", label: "Activity", icon: "activity" },
   { kind: "route", path: "/accounts", label: "Accounts", icon: "accounts" },
+  { kind: "route", path: "/reports", label: "Reports", icon: "chart" },
 ];
 
 function ShellModal(props: { title: string; children: JSX.Element; onClose: () => void }) {
@@ -85,10 +77,7 @@ export default function Layout(props: RouteSectionProps) {
   loadSettings();
 
   function isActive(item: NavItem): boolean {
-    const paths = item.activePaths ?? [item.path];
-    return paths.some((path) =>
-      path === "/" ? location.pathname === "/" : location.pathname.startsWith(path),
-    );
+    return item.path === "/" ? location.pathname === "/" : location.pathname.startsWith(item.path);
   }
 
   async function loadComposerData(): Promise<void> {
@@ -172,30 +161,22 @@ export default function Layout(props: RouteSectionProps) {
               )}
             </For>
 
-            <details class="sidebar-more" open={SECONDARY_NAV.some(isActive)}>
-              <summary class="nav-item">
-                <span class="nav-icon" aria-hidden="true">
-                  <MoneyIcon name="more" />
-                </span>
-                <span class="nav-label">More</span>
-              </summary>
-              <div class="sidebar-more-items">
-                <For each={SECONDARY_NAV}>
-                  {(item) => (
-                    <A
-                      href={item.path}
-                      class="nav-item nav-item-secondary"
-                      classList={{ active: isActive(item) }}
-                    >
-                      <span class="nav-icon" aria-hidden="true">
-                        <MoneyIcon name={item.icon} />
-                      </span>
-                      <span class="nav-label">{item.label}</span>
-                    </A>
-                  )}
-                </For>
-              </div>
-            </details>
+            <div class="sidebar-nav-secondary">
+              <For each={SECONDARY_NAV}>
+                {(item) => (
+                  <A
+                    href={item.path}
+                    class="nav-item nav-item-secondary"
+                    classList={{ active: isActive(item) }}
+                  >
+                    <span class="nav-icon" aria-hidden="true">
+                      <MoneyIcon name={item.icon} />
+                    </span>
+                    <span class="nav-label">{item.label}</span>
+                  </A>
+                )}
+              </For>
+            </div>
           </nav>
 
           <div class="sidebar-footer">
@@ -302,7 +283,7 @@ export default function Layout(props: RouteSectionProps) {
                   ×
                 </button>
               </div>
-              <For each={[PRIMARY_NAV[4], ...SECONDARY_NAV]}>
+              <For each={SECONDARY_NAV}>
                 {(item) => (
                   <button
                     type="button"

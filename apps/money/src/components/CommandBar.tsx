@@ -60,17 +60,11 @@ export default function CommandBar(props: { open: boolean; onClose: () => void }
   const [schedules, setSchedules] = createSignal<ScheduleRow[]>([]);
 
   const pages: CmdResult[] = [
-    { id: "/", label: "Home", icon: "⌂", action: () => navigate("/") },
-    { id: "/budget", label: "Budget", icon: "💰", action: () => navigate("/budget") },
+    { id: "/", label: "Overview", icon: "⌂", action: () => navigate("/") },
+    { id: "/plan", label: "Plan", icon: "💰", action: () => navigate("/plan") },
     { id: "/accounts", label: "Accounts", icon: "🏦", action: () => navigate("/accounts") },
-    {
-      id: "/transactions",
-      label: "Activity",
-      icon: "💳",
-      action: () => navigate("/transactions"),
-    },
     { id: "/reports", label: "Reports", icon: "📈", action: () => navigate("/reports") },
-    { id: "/schedules", label: "Schedules", icon: "🔄", action: () => navigate("/schedules") },
+    { id: "/categories", label: "Categories", icon: "📁", action: () => navigate("/categories") },
     { id: "/payees", label: "Payees", icon: "👤", action: () => navigate("/payees") },
     { id: "/rules", label: "Rules", icon: "⚙️", action: () => navigate("/rules") },
     { id: "/tags", label: "Tags", icon: "🏷️", action: () => navigate("/tags") },
@@ -106,7 +100,7 @@ export default function CommandBar(props: { open: boolean; onClose: () => void }
         label: p.name,
         description: "Payee",
         icon: "👤",
-        action: () => navigate(`/transactions?q=${encodeURIComponent(p.name)}`),
+        action: () => navigate(`/?month=all&q=${encodeURIComponent(p.name)}`),
       }),
     );
   }
@@ -118,7 +112,7 @@ export default function CommandBar(props: { open: boolean; onClose: () => void }
         label: c.name,
         description: "Category",
         icon: "📁",
-        action: () => navigate(`/budget?category=${encodeURIComponent(c.id)}`),
+        action: () => navigate(`/plan?category=${encodeURIComponent(c.id)}`),
       }),
     );
   }
@@ -130,7 +124,7 @@ export default function CommandBar(props: { open: boolean; onClose: () => void }
         label: s.name ?? "Untitled Schedule",
         description: "Schedule",
         icon: "🔄",
-        action: () => navigate(`/schedules?focus=${encodeURIComponent(s.id)}`),
+        action: () => navigate(`/plan?payment=${encodeURIComponent(s.id)}`),
       }),
     );
   }
@@ -154,7 +148,7 @@ export default function CommandBar(props: { open: boolean; onClose: () => void }
             label: `Search transactions for “${trimmedQuery}”`,
             description: "Search payees, notes, categories, and accounts",
             icon: "⌕",
-            action: () => navigate(`/transactions?q=${encodeURIComponent(trimmedQuery)}`),
+            action: () => navigate(`/?month=all&q=${encodeURIComponent(trimmedQuery)}`),
           },
           ...fuzzyFilter(q, [addTransaction]),
         ]

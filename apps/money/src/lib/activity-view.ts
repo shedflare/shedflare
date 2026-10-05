@@ -7,12 +7,19 @@ export function activityEntries(rows: readonly Transaction[]) {
 }
 export function filterActivity(
   rows: readonly Transaction[],
-  filter: { month: string | null; category?: string; view?: string; query: string },
+  filter: {
+    month: string | null;
+    category?: string;
+    account?: string;
+    view?: string;
+    query: string;
+  },
 ) {
   const query = filter.query.trim().toLocaleLowerCase();
   const matches = rows.filter((row) => {
     if (filter.month && row.date.slice(0, 7) !== filter.month) return false;
     if (filter.category && row.categoryId !== filter.category) return false;
+    if (filter.account && row.accountId !== filter.account) return false;
     if (
       filter.view === "uncategorized" &&
       (row.categoryId || row.isParent || row.transferId || row.startingBalanceFlag)
