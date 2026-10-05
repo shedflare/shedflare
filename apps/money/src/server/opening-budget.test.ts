@@ -21,9 +21,10 @@ test("opening balances fund the account's creation month once, excluding off-bud
   ]);
   const category = createCategory({ name: "Food", groupId: null });
   await db.insert(s.categories).values(category);
-  expect((await computeMonthBudget(db, 202610))?.toBudget).toBe(450_000_000);
-  expect((await computeMonthBudget(db, 202611))?.toBudget).toBe(0);
+  // Each opening balance funds its creation month once, then rolls forward as unassigned money.
   expect((await computeMonthBudget(db, 202609))?.toBudget).toBe(100_000_000);
+  expect((await computeMonthBudget(db, 202610))?.toBudget).toBe(550_000_000);
+  expect((await computeMonthBudget(db, 202611))?.toBudget).toBe(550_000_000);
   const report = await computeMonthlyReport(db, "2026-10");
   expect(report.income).toBe(0);
   expect(report.expense).toBe(0);
@@ -36,5 +37,6 @@ test("opening balances fund the account's creation month once, excluding off-bud
     createdAt: opened,
     updatedAt: opened,
   });
-  expect((await computeMonthBudget(db, 202610))?.toBudget).toBe(325_000_000);
+  expect((await computeMonthBudget(db, 202610))?.toBudget).toBe(425_000_000);
+  expect((await computeMonthBudget(db, 202611))?.toBudget).toBe(425_000_000);
 });

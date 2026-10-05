@@ -188,6 +188,10 @@ Deletion does not offer a partial recreation as undo. Income categories inherit 
 when created without an explicit type. Hidden categories still contribute income and assigned
 amounts to budget totals, while their rows remain hidden. Account opening balances fund the account's
 creation month once, excluding off-budget accounts; they remain excluded from Reports income.
+`computeMonthBudget` rolls months forward from the earliest budget data (YNAB-style): expense
+category balances carry over, unassigned money and last month's held amount flow into the next
+To assign, and uncovered overspending (carryover off) comes out of the next month's To assign.
+Plan shows scheduled income as "still expected" but never counts it as assignable.
 
 `/settings` reads persisted preferences with loading/failure/retry and refreshes the existing
 settings cache. Currency, number format, privacy and transaction CSV export are primary; date

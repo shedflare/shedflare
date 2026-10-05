@@ -4,12 +4,10 @@
  * Uses Drizzle query builder for typed queries and raw SQL for aggregates.
  * All functions are async — DrizzleD1Database is async.
  */
-import { and, eq, gte, lte, sql, sum } from "drizzle-orm";
-import * as tables from "../db/schema";
+import { sql } from "drizzle-orm";
 import type { Db } from "./d1-access";
 import {
   monthBoundaries,
-  prevMonthKey,
   fromMonthInt,
   toMonthInt,
   castId,
@@ -21,6 +19,10 @@ export interface BudgetRecalculationResult {
   month: number;
   toBudget: number;
   buffered: number;
+  /** Last month's unassigned money plus what it held for this month. */
+  fromLastMonth: number;
+  /** Last month's uncovered overspending, taken out of this month's To assign. */
+  overspentLastMonth: number;
   categories: CategoryBudgetRow[];
   categoryLeftovers: Array<{
     categoryId: string;
@@ -29,11 +31,6 @@ export interface BudgetRecalculationResult {
     budgeted: number;
     spent: number;
   }>;
-}
-
-interface LeftoverInfo {
-  leftover: number;
-  leftoverPos: number;
 }
 
 /** Live ledger balance: opening balance_current + non-child transactions. */
@@ -59,62 +56,52 @@ async function sumLiveBalances(
 }
 
 // -- Category spending per month -------------------------------------------
-async function getCategorySpending(
+/** Category activity through `month`, keyed by month int then category id. */
+async function getCategorySpendingThrough(
   db: Db,
   month: number,
-): Promise<Array<{ categoryId: string; spent: number }>> {
-  const { start, end } = monthBoundaries(fromMonthInt(month));
+): Promise<Map<number, Map<string, number>>> {
+  const { end } = monthBoundaries(fromMonthInt(month));
 
-  const rows = await db.all<{ category_id: string; total: number }>(
-    sql`SELECT category_id, COALESCE(SUM(amount), 0) AS total
+  const rows = await db.all<{ month: string; category_id: string; total: number }>(
+    sql`SELECT substr(date, 1, 7) AS month, category_id, COALESCE(SUM(amount), 0) AS total
      FROM transactions t
-     WHERE date >= ${start} AND date <= ${end} AND category_id IS NOT NULL
+     WHERE date <= ${end} AND category_id IS NOT NULL
        AND t.is_parent = 0
        AND (t.is_child = 0 OR EXISTS (
          SELECT 1 FROM transactions parent
          WHERE parent.id = t.parent_id AND parent.is_parent = 1
        ))
-     GROUP BY category_id`,
+     GROUP BY substr(date, 1, 7), category_id`,
   );
-  return rows.map((r) => ({ categoryId: String(r.category_id), spent: Number(r.total) }));
-}
-
-// -- Per-category leftovers for a given month -------------------------------
-async function getMonthLeftovers(
-  db: Db,
-  month: number,
-  _monthKey: string,
-): Promise<Map<string, LeftoverInfo>> {
-  const result = new Map<string, LeftoverInfo>();
-  const cats = await db.all<{ id: string }>(sql`SELECT id FROM categories WHERE hidden = 0`);
-  const spending = await getCategorySpending(db, month);
-  const spendingMap = new Map(spending.map((s) => [s.categoryId, s.spent]));
-
-  const budgetRows = await db.all<{
-    category_id: string;
-    amount: number;
-    carryover: number;
-  }>(sql`SELECT category_id, amount, carryover FROM budgets WHERE month = ${month}`);
-
-  for (const cat of cats) {
-    const categoryId = String(cat.id);
-    const budget = budgetRows.find((b) => String(b.category_id) === categoryId);
-    const budgeted = budget ? Number(budget.amount) : 0;
-    const spent = spendingMap.get(categoryId) ?? 0;
-    const leftover = budgeted + spent;
-    const leftoverPos = Math.max(leftover, 0);
-    result.set(categoryId, { leftover, leftoverPos });
+  const result = new Map<number, Map<string, number>>();
+  for (const r of rows) {
+    const key = toMonthInt(String(r.month));
+    const byCategory = result.get(key) ?? new Map<string, number>();
+    byCategory.set(String(r.category_id), Number(r.total));
+    result.set(key, byCategory);
   }
   return result;
 }
 
+function nextMonthInt(month: number): number {
+  return month % 100 === 12 ? month + 89 : month + 1;
+}
+
 // -- Main entry point: compute full budget for a month -----------------------
+/**
+ * Envelope budget for `month`, rolled forward from the first month with any budget data:
+ * - category balances carry over month to month (overspending carries only when the
+ *   category's carryover flag is set; otherwise it comes out of the next To assign);
+ * - unassigned money carries over, and money held for next month is released into it.
+ */
 export async function computeMonthBudget(
   db: Db,
   month: number,
   monthKey?: string,
 ): Promise<BudgetRecalculationResult | null> {
   const mk = monthKey ?? fromMonthInt(month);
+  const { end } = monthBoundaries(mk);
 
   const cats = await db.all<{
     id: string;
@@ -136,86 +123,120 @@ export async function computeMonthBudget(
 
   if (cats.length === 0) return null;
 
-  const spending = await getCategorySpending(db, month);
-  const spendingMap = new Map(spending.map((s) => [s.categoryId, s.spent]));
+  const spending = await getCategorySpendingThrough(db, month);
 
   const budgetRows = await db.all<{
+    month: number;
     category_id: string;
     amount: number;
     carryover: number;
-  }>(sql`SELECT category_id, amount, carryover FROM budgets WHERE month = ${month}`);
-  const budgetMap = new Map(
-    budgetRows.map((b) => [
-      String(b.category_id),
-      { amount: Number(b.amount), carryover: Boolean(b.carryover) },
-    ]),
-  );
-
-  const prevMk = prevMonthKey(mk);
-  const prevMonth = toMonthInt(prevMk);
-  const prevLeftovers = await getMonthLeftovers(db, prevMonth, prevMk);
-
-  const budgetMonthRow = await db.get<{ id: string; buffered: number }>(
-    sql`SELECT id, buffered FROM budget_months WHERE id = ${mk}`,
-  );
-  const buffered = Number(budgetMonthRow?.buffered ?? 0);
-
-  const categoryRows: CategoryBudgetRow[] = [];
-  let totalIncome = 0;
-  let totalBudgeted = 0;
-
-  for (const cat of cats) {
-    const categoryId = String(cat.id);
-    const isIncome = Boolean(cat.is_income);
-    const budget = budgetMap.get(categoryId);
-    const budgeted = budget?.amount ?? 0;
-    const carryover = budget?.carryover ?? false;
-    const spent = spendingMap.get(categoryId) ?? 0;
-    const prevLeftover = prevLeftovers.get(categoryId);
-    const prevLeftoverVal = prevLeftover?.leftover ?? 0;
-    const prevLeftoverPosVal = prevLeftover?.leftoverPos ?? 0;
-
-    const carryoverAmount = carryover ? prevLeftoverVal : Math.max(prevLeftoverPosVal, 0);
-    const leftover = budgeted + spent + carryoverAmount;
-    const leftoverPos = Math.max(leftover, 0);
-
-    if (isIncome) totalIncome += spent;
-    totalBudgeted += budgeted;
-
-    // Visibility changes the list, while existing income and assignments still fund the budget.
-    if (cat.hidden) continue;
-
-    categoryRows.push({
-      categoryId: castId<CategoryId>(categoryId),
-      categoryName: String(cat.name),
-      groupId: cat.group_id ? castId<CategoryGroupId>(cat.group_id) : null,
-      groupName: cat.group_name ?? null,
-      budgeted,
-      spent,
-      leftover,
-      leftoverPos,
-      carryover,
+  }>(sql`SELECT month, category_id, amount, carryover FROM budgets WHERE month <= ${month}`);
+  const budgets = new Map<number, Map<string, { amount: number; carryover: boolean }>>();
+  for (const b of budgetRows) {
+    const key = Number(b.month);
+    const byCategory =
+      budgets.get(key) ?? new Map<string, { amount: number; carryover: boolean }>();
+    byCategory.set(String(b.category_id), {
+      amount: Number(b.amount),
+      carryover: Boolean(b.carryover),
     });
+    budgets.set(key, byCategory);
   }
 
-  const { start, end } = monthBoundaries(mk);
-  const [opening] = await db
-    .select({ total: sum(tables.accounts.balanceCurrent) })
-    .from(tables.accounts)
-    .where(
-      and(
-        eq(tables.accounts.offbudget, false),
-        gte(tables.accounts.createdAt, start),
-        lte(tables.accounts.createdAt, `${end}T23:59:59.999Z`),
-      ),
-    )
-    .all();
-  const toBudget = totalIncome + Number(opening?.total ?? 0) - totalBudgeted - buffered;
+  const bufferRows = await db.all<{ id: string; buffered: number }>(
+    sql`SELECT id, buffered FROM budget_months WHERE id <= ${mk}`,
+  );
+  const buffers = new Map(bufferRows.map((r) => [toMonthInt(String(r.id)), Number(r.buffered)]));
+
+  // Opening balances of on-budget accounts fund the month the account was added.
+  const openingRows = await db.all<{ month: string; total: number | null }>(
+    sql`SELECT substr(created_at, 1, 7) AS month, SUM(balance_current) AS total
+     FROM accounts
+     WHERE offbudget = 0 AND created_at <= ${`${end}T23:59:59.999Z`}
+     GROUP BY substr(created_at, 1, 7)`,
+  );
+  const openings = new Map(
+    openingRows.map((r) => [toMonthInt(String(r.month)), Number(r.total ?? 0)]),
+  );
+
+  const startMonth = Math.min(
+    month,
+    ...spending.keys(),
+    ...budgets.keys(),
+    ...buffers.keys(),
+    ...openings.keys(),
+  );
+
+  const categoryRows: CategoryBudgetRow[] = [];
+  const leftovers = new Map<string, number>();
+  let toBudget = 0;
+  let buffered = 0;
+  let fromLastMonth = 0;
+  let overspentLastMonth = 0;
+
+  for (let current = startMonth; current <= month; current = nextMonthInt(current)) {
+    const isTarget = current === month;
+    const monthSpending = spending.get(current);
+    const monthBudgets = budgets.get(current);
+    fromLastMonth = toBudget + buffered;
+    overspentLastMonth = 0;
+    buffered = buffers.get(current) ?? 0;
+    let totalIncome = 0;
+    let totalBudgeted = 0;
+
+    for (const cat of cats) {
+      const categoryId = String(cat.id);
+      const isIncome = Boolean(cat.is_income);
+      const budget = monthBudgets?.get(categoryId);
+      const budgeted = budget?.amount ?? 0;
+      const carryover = budget?.carryover ?? false;
+      const spent = monthSpending?.get(categoryId) ?? 0;
+      totalBudgeted += budgeted;
+
+      let leftover: number;
+      if (isIncome) {
+        // Income funds To assign; it doesn't accumulate as a category balance.
+        totalIncome += spent;
+        leftover = budgeted + spent;
+      } else {
+        const previous = leftovers.get(categoryId) ?? 0;
+        if (previous < 0 && !carryover) overspentLastMonth -= previous;
+        const carried = carryover ? previous : Math.max(previous, 0);
+        leftover = budgeted + spent + carried;
+        leftovers.set(categoryId, leftover);
+      }
+
+      // Visibility changes the list, while existing income and assignments still fund the budget.
+      if (!isTarget || cat.hidden) continue;
+
+      categoryRows.push({
+        categoryId: castId<CategoryId>(categoryId),
+        categoryName: String(cat.name),
+        groupId: cat.group_id ? castId<CategoryGroupId>(cat.group_id) : null,
+        groupName: cat.group_name ?? null,
+        budgeted,
+        spent,
+        leftover,
+        leftoverPos: Math.max(leftover, 0),
+        carryover,
+      });
+    }
+
+    toBudget =
+      fromLastMonth +
+      totalIncome +
+      (openings.get(current) ?? 0) -
+      overspentLastMonth -
+      totalBudgeted -
+      buffered;
+  }
 
   return {
     month,
     toBudget,
     buffered,
+    fromLastMonth,
+    overspentLastMonth,
     categories: categoryRows,
     categoryLeftovers: categoryRows.map((c) => ({
       categoryId: c.categoryId,

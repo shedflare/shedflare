@@ -207,6 +207,8 @@ const MonthBudgetSchema = S.Struct({
   month: S.Number,
   toBudget: S.Number,
   buffered: S.Number,
+  fromLastMonth: S.Number,
+  overspentLastMonth: S.Number,
   categories: S.Array(CategoryBudgetRowSchema),
 });
 

@@ -218,9 +218,15 @@ describe("Budget schemas", () => {
   });
 
   test("MonthBudgetSchema accepts empty categories", () => {
-    expect(
-      decode(MonthBudgetSchema, { month: 202604, toBudget: 0, buffered: 0, categories: [] }),
-    ).toEqual({ month: 202604, toBudget: 0, buffered: 0, categories: [] });
+    const empty = {
+      month: 202604,
+      toBudget: 0,
+      buffered: 0,
+      fromLastMonth: 0,
+      overspentLastMonth: 0,
+      categories: [],
+    };
+    expect(decode(MonthBudgetSchema, empty)).toEqual(empty);
   });
 });
 

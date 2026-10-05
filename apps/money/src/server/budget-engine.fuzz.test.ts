@@ -65,6 +65,9 @@ describe("budget engine fuzzing", () => {
     const expectedByCategory = new Map<string, ExpectedCategory>();
     let expectedIncome = 0;
     let expectedBudgeted = 0;
+    let previousIncome = 0;
+    let previousBudgeted = 0;
+    let overspentLastMonth = 0;
 
     for (let index = 0; index < CATEGORY_COUNT; index++) {
       const categoryId = `cat_fuzz_${String(index).padStart(3, "0")}`;
@@ -74,9 +77,11 @@ describe("budget engine fuzzing", () => {
       const previousSpent = isIncome ? random.int(0, 400_000) : -random.int(0, 250_000);
       const currentSpent = isIncome ? random.int(0, 400_000) : -random.int(0, 250_000);
       const carryover = random.bool();
-      const previousLeftover = previousBudget + previousSpent;
+      // Expense balances roll forward; income only funds To assign.
+      const previousLeftover = isIncome ? 0 : previousBudget + previousSpent;
       const carryoverAmount = carryover ? previousLeftover : Math.max(previousLeftover, 0);
       const leftover = currentBudget + currentSpent + carryoverAmount;
+      if (!carryover) overspentLastMonth += Math.max(-previousLeftover, 0);
 
       categories.push({
         id: categoryId,
@@ -159,8 +164,12 @@ describe("budget engine fuzzing", () => {
         leftoverPos: Math.max(leftover, 0),
         carryover,
       });
-      if (isIncome) expectedIncome += currentSpent;
+      if (isIncome) {
+        expectedIncome += currentSpent;
+        previousIncome += previousSpent;
+      }
       expectedBudgeted += currentBudget;
+      previousBudgeted += previousBudget;
     }
 
     await db.insert(schema.categories).values(categories).run();
@@ -179,7 +188,12 @@ describe("budget engine fuzzing", () => {
     const result = await computeMonthBudget(db, 202604);
     expect(result).not.toBeNull();
     expect(result!.categories).toHaveLength(CATEGORY_COUNT);
-    expect(result!.toBudget).toBe(expectedIncome - expectedBudgeted - buffered);
+    const fromLastMonth = previousIncome - previousBudgeted;
+    expect(result!.fromLastMonth).toBe(fromLastMonth);
+    expect(result!.overspentLastMonth).toBe(overspentLastMonth);
+    expect(result!.toBudget).toBe(
+      fromLastMonth + expectedIncome - overspentLastMonth - expectedBudgeted - buffered,
+    );
     expect(result!.buffered).toBe(buffered);
 
     for (const category of result!.categories) {

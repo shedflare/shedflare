@@ -45,6 +45,12 @@ Deleting a group retains its categories and history. Failed changes keep their d
 Hiding a category preserves its assigned money in budget totals. Opening balances are available to
 assign once, in the account's creation month, and remain separate from income reports.
 
+Budgeting works like YNAB: you assign money you already have. Income counts once it is recorded,
+so pay received on the 25th funds next month. Category balances roll over month to month,
+unassigned money and anything held for next month carry into the next To assign, and overspending
+is either covered by moving money or taken from next month's To assign. Scheduled income shows as
+"still expected" on Plan without becoming assignable.
+
 Settings keeps currency, number format, privacy and CSV export up front. Date format and closed
 account visibility are under More preferences. Failed saves retain the selection; the global
 display updates after the write succeeds.

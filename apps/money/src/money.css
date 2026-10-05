@@ -3969,6 +3969,9 @@ a.ws-stat:hover {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.ws-stat-primary > small {
+  white-space: normal;
+}
 .ws-stat-primary {
   background: var(--sage-bg);
 }

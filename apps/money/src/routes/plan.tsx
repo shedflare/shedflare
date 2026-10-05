@@ -170,6 +170,19 @@ export default function PlanPage() {
     }
     return totals;
   });
+  /** Scheduled money still expected in this month; information only until it's recorded. */
+  const expectedIncome = createMemo(() => {
+    if (month() < currentMonthKey()) return 0;
+    const { start, end } = monthBoundaries(month());
+    const from = month() === currentMonthKey() ? "0000-01-01" : start;
+    return (recurring()?.payments ?? []).reduce(
+      (sum, payment) =>
+        payment.amount !== null && payment.amount > 0
+          ? sum + payment.amount * paymentOccurrences(payment, from, end).length
+          : sum,
+      0,
+    );
+  });
   const rows = createMemo<PlanRow[]>(() =>
     categories().map((category) => {
       const last = previous()?.categories.find((row) => row.categoryId === category.categoryId);
@@ -228,6 +241,17 @@ export default function PlanPage() {
   const totals = createMemo(() => sumRows(rows()));
   const attentionCount = createMemo(() => rows().filter(needsAttention).length);
   const toBudget = () => data()?.budget.toBudget ?? 0;
+  /** Where To assign came from beyond this month's income, so rollover is visible. */
+  const toBudgetSources = () => {
+    const budget = data()?.budget;
+    if (!budget) return null;
+    const lastMonth = df().formatMonth(previousMonth()).slice(0, 3);
+    const parts: string[] = [];
+    if (budget.fromLastMonth !== 0) parts.push(`${money(budget.fromLastMonth)} from ${lastMonth}`);
+    if (budget.overspentLastMonth > 0) parts.push(`−${money(budget.overspentLastMonth)} overspent`);
+    if (budget.buffered > 0) parts.push(`${money(budget.buffered)} held for next month`);
+    return parts.length ? parts.join(" · ") : null;
+  };
   const selected = createMemo(() =>
     categories().find((category) => category.categoryId === params.category),
   );
@@ -614,9 +638,7 @@ export default function PlanPage() {
           >
             <span>{toBudget() < 0 ? "Overassigned" : "To assign"}</span>
             <strong>{money(Math.abs(toBudget()))}</strong>
-            <Show when={(data()?.budget.buffered ?? 0) > 0}>
-              <small>{money(data()!.budget.buffered)} held for next month</small>
-            </Show>
+            <Show when={toBudgetSources()}>{(line) => <small>{line()}</small>}</Show>
           </button>
           <div class="ws-stat">
             <span>Income</span>
@@ -625,8 +647,17 @@ export default function PlanPage() {
                 {money(report()!.income)}
               </Show>
             </strong>
-            <Show when={report()?.previous.transactionCount}>
-              <small>last month {money(report()!.previous.income)}</small>
+            <Show
+              when={expectedIncome() > 0}
+              fallback={
+                <Show when={report()?.previous.transactionCount}>
+                  <small>last month {money(report()!.previous.income)}</small>
+                </Show>
+              }
+            >
+              <small title="Scheduled income isn’t assignable until it arrives">
+                +{money(expectedIncome())} still expected
+              </small>
             </Show>
           </div>
           <div class="ws-stat">

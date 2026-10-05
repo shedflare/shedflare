@@ -63,7 +63,14 @@ export function createBudgetGroup(env: Env) {
           const result = await computeMonthBudget(db, month);
           return validatedJson(
             MonthBudgetResponseSchema,
-            result ?? { categories: [], toBudget: 0, buffered: 0, month },
+            result ?? {
+              categories: [],
+              toBudget: 0,
+              buffered: 0,
+              fromLastMonth: 0,
+              overspentLastMonth: 0,
+              month,
+            },
           );
         }),
       ),

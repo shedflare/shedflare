@@ -200,6 +200,8 @@ export const MonthBudgetSchema = Schema.Struct({
   month: Schema.Number,
   toBudget: Schema.Number,
   buffered: Schema.Number,
+  fromLastMonth: Schema.Number,
+  overspentLastMonth: Schema.Number,
   categories: Schema.Array(CategoryBudgetRowSchema),
 });
 export type MonthBudget = Schema.Schema.Type<typeof MonthBudgetSchema>;
