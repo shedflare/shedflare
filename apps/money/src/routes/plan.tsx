@@ -449,7 +449,11 @@ export default function PlanPage() {
             <span
               class="pg-meter pg-plan-meter"
               aria-hidden="true"
-              title="Solid: available after scheduled payments · Faded: planned recurring payments"
+              title={
+                privacy().enabled
+                  ? "Amounts hidden in privacy mode"
+                  : `Assigned: ${money(category.budgeted)}\nSpent: ${money(row.spent)}\nScheduled: ${money(row.scheduled)}\nAvailable: ${money(category.leftover)}\nAfter scheduled: ${money(category.leftover - row.scheduled)}\nSolid: after scheduled · Faded: scheduled`
+              }
             >
               <span
                 classList={{ "is-overspent": category.leftover < 0 }}
@@ -493,6 +497,10 @@ export default function PlanPage() {
           <span class="pg-cell-label">Spent</span>
           {row.spent ? money(row.spent) : "—"}
         </span>
+        <span class={`pg-cell pg-num pg-muted ${privacy().blurClass()}`}>
+          <span class="pg-cell-label">Scheduled</span>
+          {row.scheduled ? money(row.scheduled) : "—"}
+        </span>
         <span
           class={`pg-cell pg-num pg-available ${privacy().blurClass()}`}
           classList={{
@@ -502,15 +510,15 @@ export default function PlanPage() {
         >
           <span class="pg-cell-label">Available</span>
           {money(category.leftover)}
-          <Show when={category.leftover >= 0 && row.short > 0}>
-            <small title="Scheduled payments exceed what’s available">
-              {money(row.short)} short
+          <Show when={row.scheduled > 0}>
+            <small
+              title="Available after scheduled payments"
+              aria-label={`After scheduled: ${money(category.leftover - row.scheduled)}`}
+              classList={{ negative: category.leftover - row.scheduled < 0 }}
+            >
+              {money(category.leftover - row.scheduled)}
             </small>
           </Show>
-        </span>
-        <span class={`pg-cell pg-num pg-muted ${privacy().blurClass()}`}>
-          <span class="pg-cell-label">Scheduled</span>
-          {row.scheduled ? money(row.scheduled) : "—"}
         </span>
         <span class={`pg-cell pg-num pg-muted pg-last ${privacy().blurClass()}`}>
           <span class="pg-cell-label">Last month</span>
@@ -801,8 +809,8 @@ export default function PlanPage() {
                     <span>Category</span>
                     <span>Assigned</span>
                     <span>Spent</span>
-                    <span>Available</span>
                     <span>Scheduled</span>
+                    <span>Available</span>
                     <span>Last month</span>
                     <span>Target</span>
                   </div>
@@ -815,10 +823,19 @@ export default function PlanPage() {
                             <h3>{group.name}</h3>
                             <span>{money(sums().budgeted)}</span>
                             <span>{money(sums().spent)}</span>
-                            <span classList={{ negative: sums().available < 0 }}>
-                              {money(sums().available)}
-                            </span>
                             <span>{sums().scheduled ? money(sums().scheduled) : "—"}</span>
+                            <span class="pg-cell" classList={{ negative: sums().available < 0 }}>
+                              {money(sums().available)}
+                              <Show when={sums().scheduled > 0}>
+                                <small
+                                  title="Available after scheduled payments"
+                                  aria-label={`After scheduled: ${money(sums().available - sums().scheduled)}`}
+                                  classList={{ negative: sums().available - sums().scheduled < 0 }}
+                                >
+                                  {money(sums().available - sums().scheduled)}
+                                </small>
+                              </Show>
+                            </span>
                             <span>{previous() ? money(sums().lastSpent) : "—"}</span>
                             <span />
                           </div>
@@ -831,10 +848,25 @@ export default function PlanPage() {
                     <strong>Total</strong>
                     <strong>{money(sumRows(visible()).budgeted)}</strong>
                     <strong>{money(sumRows(visible()).spent)}</strong>
-                    <strong classList={{ negative: sumRows(visible()).available < 0 }}>
-                      {money(sumRows(visible()).available)}
-                    </strong>
                     <strong>{money(sumRows(visible()).scheduled)}</strong>
+                    <strong
+                      class="pg-cell"
+                      classList={{ negative: sumRows(visible()).available < 0 }}
+                    >
+                      {money(sumRows(visible()).available)}
+                      <Show when={sumRows(visible()).scheduled > 0}>
+                        <small
+                          title="Available after scheduled payments"
+                          aria-label={`After scheduled: ${money(sumRows(visible()).available - sumRows(visible()).scheduled)}`}
+                          classList={{
+                            negative:
+                              sumRows(visible()).available - sumRows(visible()).scheduled < 0,
+                          }}
+                        >
+                          {money(sumRows(visible()).available - sumRows(visible()).scheduled)}
+                        </small>
+                      </Show>
+                    </strong>
                     <strong>{previous() ? money(sumRows(visible()).lastSpent) : "—"}</strong>
                     <span />
                   </div>
