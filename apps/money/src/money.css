@@ -4539,6 +4539,16 @@ a.ws-stat:hover {
   max-width: 160px;
   height: 3px;
 }
+.pg-plan-meter {
+  display: flex;
+}
+.pg-plan-meter > span {
+  flex-shrink: 0;
+  border-radius: 0;
+}
+.pg-plan-meter > .pg-meter-scheduled {
+  opacity: 0.3;
+}
 .pg-cell {
   display: flex;
   flex-direction: column;

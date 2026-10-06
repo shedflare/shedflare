@@ -418,6 +418,8 @@ export default function PlanPage() {
   function planRow(row: PlanRow) {
     const category = row.category;
     const ratio = () => availableRatio(category);
+    const scheduledRatio = () =>
+      category.leftover > 0 ? ratio() * Math.min(1, row.scheduled / category.leftover) : 0;
     const copyable = () =>
       row.lastAssigned !== null && row.lastAssigned !== category.budgeted && !locked();
     return (
@@ -444,11 +446,20 @@ export default function PlanPage() {
           />
           <span class="pg-category-name">
             <strong>{category.categoryName}</strong>
-            <span class="pg-meter" aria-hidden="true">
+            <span
+              class="pg-meter pg-plan-meter"
+              aria-hidden="true"
+              title="Solid: available after scheduled payments · Faded: planned recurring payments"
+            >
               <span
                 classList={{ "is-overspent": category.leftover < 0 }}
-                style={{ width: `${category.leftover < 0 ? 100 : ratio() * 100}%` }}
+                style={{
+                  width: `${category.leftover < 0 ? 100 : (ratio() - scheduledRatio()) * 100}%`,
+                }}
               />
+              <Show when={scheduledRatio() > 0}>
+                <span class="pg-meter-scheduled" style={{ width: `${scheduledRatio() * 100}%` }} />
+              </Show>
             </span>
           </span>
         </button>

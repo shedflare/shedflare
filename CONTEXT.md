@@ -144,6 +144,8 @@ read the two months from D1. `src/domain/monthly-report.ts` owns the shared resp
 aggregation: refunds net against category expenses, valid split children replace their parent,
 and transfers/opening entries stay out. Hidden categories and closed accounts retain historical
 activity. Month changes ignore stale payloads; failed reads expose Retry.
+`GET /api/reports/cash-flow` uses the same D1 report loader and monthly aggregation, including
+uncategorized activity, so Plan's cash flow totals and averages agree with Monthly Reports.
 
 Money's single budget currency is selected by the persisted `display_currency` setting (USD or IDR).
 `src/domain/money-amount.ts` owns strict amount parsing and currency-default separators;

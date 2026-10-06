@@ -6,6 +6,8 @@
  */
 import { sql } from "drizzle-orm";
 import type { Db } from "./d1-access";
+import { loadReportData } from "./monthly-report";
+import { monthlyReport } from "../domain/monthly-report";
 import {
   monthBoundaries,
   fromMonthInt,
@@ -318,27 +320,17 @@ export async function computeCashFlow(
     monthEnds.push(boundaries.end);
   }
 
-  const rows = await db.all<{ month: string; is_income: number; total: number }>(
-    sql`SELECT strftime('%Y-%m', t.date) AS month, c.is_income, COALESCE(SUM(t.amount), 0) AS total
-     FROM transactions t
-     JOIN categories c ON t.category_id = c.id
-     WHERE t.date >= ${monthStarts[0]} AND t.date <= ${monthEnds[monthEnds.length - 1]}
-       AND t.is_child = 0
-     GROUP BY strftime('%Y-%m', t.date), c.is_income`,
-  );
-
-  const incomeMap = new Map<string, number>();
-  const expenseMap = new Map<string, number>();
-  for (const r of rows) {
-    if (r.is_income === 1) incomeMap.set(r.month, Number(r.total));
-    else expenseMap.set(r.month, Number(r.total));
-  }
-
-  return monthKeys.map((mk) => ({
-    month: mk,
-    income: Math.abs(incomeMap.get(mk) ?? 0),
-    expense: Math.abs(expenseMap.get(mk) ?? 0),
-  }));
+  const data = await loadReportData(db, monthStarts[0]!, monthEnds[monthEnds.length - 1]!);
+  return monthKeys.map((month) => {
+    const report = monthlyReport(
+      month,
+      data.transactions,
+      data.categories,
+      false,
+      data.additionalParents,
+    );
+    return { month, income: report.income, expense: report.expense };
+  });
 }
 
 // -- Spending by category -----------------------------------------------------

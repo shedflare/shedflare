@@ -75,11 +75,11 @@ export default function CashFlowPanel(props: { month: string }) {
                   <span class={`flow-bars ${privacy().blurClass()}`} aria-hidden="true">
                     <span
                       class="flow-bar flow-bar-in"
-                      style={{ width: `${(row.income / maximum()) * 100}%` }}
+                      style={{ width: `${(Math.max(0, row.income) / maximum()) * 100}%` }}
                     />
                     <span
                       class="flow-bar flow-bar-out"
-                      style={{ width: `${(row.expense / maximum()) * 100}%` }}
+                      style={{ width: `${(Math.max(0, row.expense) / maximum()) * 100}%` }}
                     />
                   </span>
                   <span
