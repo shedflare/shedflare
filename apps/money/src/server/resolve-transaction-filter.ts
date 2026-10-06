@@ -5,10 +5,9 @@ import type { Db } from "./d1-access";
 import * as s from "../db/schema";
 import { eq } from "drizzle-orm";
 
-export type ParsedTransactionFilter = {
-  filterSql: SQL | null;
-  conditionsOp: "and" | "or";
-};
+export type ParsedTransactionFilter =
+  | { status: "valid"; filterSql: SQL | null; conditionsOp: "and" | "or" }
+  | { status: "invalid"; error: string };
 
 /**
  * Resolve filter SQL from either a saved filter id or inline conditions JSON.
@@ -26,7 +25,7 @@ export async function resolveTransactionFilter(db: Db, url: URL): Promise<Parsed
     try {
       conditions = [...parseFilterConditions(conditionsParam)];
     } catch {
-      conditions = [];
+      return { status: "invalid", error: "Invalid transaction filter" };
     }
   } else if (filterId) {
     const [filterRow] = await db
@@ -38,14 +37,19 @@ export async function resolveTransactionFilter(db: Db, url: URL): Promise<Parsed
       try {
         conditions = [...parseFilterConditions(filterRow.conditions ?? "[]")];
       } catch {
-        conditions = [];
+        return { status: "invalid", error: "Invalid saved transaction filter" };
       }
       conditionsOp = filterRow.conditionsOp === "or" ? "or" : "and";
     }
   }
 
-  return {
-    filterSql: buildFilterSql(conditions, conditionsOp),
-    conditionsOp,
-  };
+  try {
+    return {
+      status: "valid",
+      filterSql: buildFilterSql(conditions, conditionsOp),
+      conditionsOp,
+    };
+  } catch {
+    return { status: "invalid", error: "Invalid transaction filter" };
+  }
 }

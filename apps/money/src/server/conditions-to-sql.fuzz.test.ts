@@ -121,13 +121,21 @@ function matches(row: TransactionFixture, condition: FilterCondition): boolean {
     case "doesNotContain":
       return !String(raw).toLowerCase().includes(condition.value.toLowerCase());
     case "gt":
-      return Number(raw) > condition.value;
+      return condition.field === "date"
+        ? String(raw) > String(condition.value)
+        : Number(raw) > Number(condition.value);
     case "gte":
-      return Number(raw) >= condition.value;
+      return condition.field === "date"
+        ? String(raw) >= String(condition.value)
+        : Number(raw) >= Number(condition.value);
     case "lt":
-      return Number(raw) < condition.value;
+      return condition.field === "date"
+        ? String(raw) < String(condition.value)
+        : Number(raw) < Number(condition.value);
     case "lte":
-      return Number(raw) <= condition.value;
+      return condition.field === "date"
+        ? String(raw) <= String(condition.value)
+        : Number(raw) <= Number(condition.value);
     case "oneOf":
       return condition.value.includes(raw);
     case "isbetween":

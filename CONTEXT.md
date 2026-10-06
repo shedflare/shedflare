@@ -217,6 +217,9 @@ child matches retain their parent, and transfers/starting balances are excluded 
 Reconciled balances and linked/split transactions are locked in the everyday drawer; the ledger
 retains their existing controls. Activity reads transactions and edit metadata as one retryable
 request and ignores superseded filter responses. There is no second transaction store.
+CategoryDrawer's Activity reads `/api/transactions` with category and month date comparisons;
+matching split children remain visible. Invalid inline or saved filter conditions return 400
+instead of falling back to an unfiltered ledger.
 
 `/accounts/:id` opens the same activity feed with its live balance, account switcher, Add, and
 `AccountTransferDialog.tsx`. Ledger, CSV import, reconciliation, rename, and close/reopen live in

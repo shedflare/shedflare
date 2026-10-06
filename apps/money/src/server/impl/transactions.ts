@@ -16,7 +16,10 @@ export function createTransactionsGroup(env: Env) {
       wrapHandler(async (req: Request): Promise<Response> => {
         const url = new URL(req.url);
         const db = createDb(env.MONEY_DB);
-        const { filterSql } = await resolveTransactionFilter(db, url);
+        const filter = await resolveTransactionFilter(db, url);
+        if (filter.status === "invalid")
+          return Response.json({ error: filter.error }, { status: 400 });
+        const { filterSql } = filter;
 
         const query = db
           .select({

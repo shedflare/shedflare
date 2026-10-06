@@ -104,7 +104,10 @@ export function createAccountsGroup(env: Env) {
             });
 
           let whereClause = eq(s.transactions.accountId, accountId);
-          const { filterSql } = await resolveTransactionFilter(db, url);
+          const filter = await resolveTransactionFilter(db, url);
+          if (filter.status === "invalid")
+            return Response.json({ error: filter.error }, { status: 400 });
+          const { filterSql } = filter;
           if (filterSql) whereClause = and(whereClause, filterSql) ?? whereClause;
 
           const rows = await db

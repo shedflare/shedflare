@@ -83,7 +83,7 @@ export default function CategoryDrawer(props: {
     ),
   );
   const recent = createMemo(() =>
-    (activity()?.transactions ?? []).filter((transaction) => !transaction.isChild).slice(0, 8),
+    (activity()?.transactions ?? []).filter((transaction) => !transaction.isParent).slice(0, 8),
   );
   async function saveAssigned(event: SubmitEvent) {
     event.preventDefault();

@@ -34,6 +34,12 @@ export interface NumericCondition {
   value: number;
 }
 
+export interface DateComparisonCondition {
+  field: "date";
+  op: "gt" | "gte" | "lt" | "lte";
+  value: string;
+}
+
 export interface OneOfCondition {
   field: string;
   op: "oneOf";
@@ -53,6 +59,7 @@ export type FilterCondition =
   | ContainsCondition
   | DoesNotContainCondition
   | NumericCondition
+  | DateComparisonCondition
   | OneOfCondition
   | IsBetweenCondition;
 
@@ -79,6 +86,11 @@ const FilterConditionSchema = Schema.Union([
     value: Schema.Number,
   }),
   Schema.Struct({
+    field: Schema.Literal("date"),
+    op: Schema.Literals(["gt", "gte", "lt", "lte"]),
+    value: Schema.String,
+  }),
+  Schema.Struct({
     field: Schema.String,
     op: Schema.Literal("oneOf"),
     value: Schema.Array(Schema.Union([Schema.String, Schema.Number])),
@@ -95,31 +107,32 @@ export function parseFilterConditions(json: string): ReadonlyArray<FilterConditi
   return Schema.decodeUnknownSync(Schema.Array(FilterConditionSchema))(JSON.parse(json));
 }
 
-function colRef(field: string): SQL {
+function colRef(field: string, table: "transactions" | "t"): SQL {
+  const qualifier = sql.raw(table);
   switch (field) {
     case "account":
-      return sql`t.account_id`;
+      return sql`${qualifier}.account_id`;
     case "category":
-      return sql`t.category_id`;
+      return sql`${qualifier}.category_id`;
     case "payee":
-      return sql`t.payee`;
+      return sql`${qualifier}.payee`;
     case "amount":
-      return sql`t.amount`;
+      return sql`${qualifier}.amount`;
     case "date":
-      return sql`t.date`;
+      return sql`${qualifier}.date`;
     case "notes":
-      return sql`t.notes`;
+      return sql`${qualifier}.notes`;
     case "cleared":
-      return sql`t.cleared`;
+      return sql`${qualifier}.cleared`;
     case "reconciled":
-      return sql`t.reconciled`;
+      return sql`${qualifier}.reconciled`;
     default:
       throw new Error(`Unknown filter field: ${field}`);
   }
 }
 
-function conditionToSql(cond: FilterCondition): SQL {
-  const col = colRef(cond.field);
+function conditionToSql(cond: FilterCondition, table: "transactions" | "t"): SQL {
+  const col = colRef(cond.field, table);
 
   switch (cond.op) {
     case "is": {
@@ -158,9 +171,10 @@ function conditionToSql(cond: FilterCondition): SQL {
 export function buildFilterSql(
   conditions: ReadonlyArray<FilterCondition>,
   conditionsOp: "and" | "or",
+  table: "transactions" | "t" = "transactions",
 ): SQL | null {
   if (conditions.length === 0) return null;
-  const fragments = conditions.map(conditionToSql);
+  const fragments = conditions.map((condition) => conditionToSql(condition, table));
   if (fragments.length === 0) return null;
   return conditionsOp === "or" ? (or(...fragments) ?? null) : (and(...fragments) ?? null);
 }
@@ -175,7 +189,7 @@ export function buildFilterWhereSql(
   conditions: ReadonlyArray<FilterCondition>,
   conditionsOp: "and" | "or",
 ): FilterWhereSql {
-  const sqlObj = buildFilterSql(conditions, conditionsOp);
+  const sqlObj = buildFilterSql(conditions, conditionsOp, "t");
   if (!sqlObj) return { whereClause: "", params: [] };
   const built = new SQLiteDialect().sqlToQuery(sqlObj);
   return { whereClause: built.sql, params: built.params };
