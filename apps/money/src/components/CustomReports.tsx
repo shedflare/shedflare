@@ -1,22 +1,13 @@
-import { createSignal, createEffect, For, onCleanup, onMount, Show } from "solid-js";
-import { AreaChart, BarChart, DonutChart, BudgetBar, CHART_COLORS } from "../charts";
-import type { TimeSeriesPoint, BarGroup, PieSlice, BudgetPair } from "../charts";
+import { createSignal, For, onMount, Show } from "solid-js";
+import { AreaChart, BarChart, DonutChart } from "../charts";
+import type { TimeSeriesPoint, BarGroup, PieSlice } from "../charts";
 import { dispatch } from "../lib/pending-ops";
 import { api } from "../lib/api";
 import { useCurrency, formatCentsValue, type NumberFormat } from "../lib/currency";
 import { usePrivacyMode } from "../lib/privacy";
 import { PageState } from "../components/PageState";
-import { listenForMoneyDataChanged } from "../lib/data-events";
 import * as Schema from "effect/Schema";
 import type { CustomReportResult, CustomReportsResponse } from "../domain/schemas-client";
-
-type ReportId =
-  | "net-worth"
-  | "cash-flow"
-  | "spending"
-  | "budget-analysis"
-  | "age-of-money"
-  | "custom";
 
 type CustomReport = CustomReportsResponse["reports"][number];
 type CustomReportRow = CustomReportResult["rows"][number];
@@ -72,30 +63,6 @@ function formatReportCell(value: ReportCell): string {
   return value == null ? "" : String(value);
 }
 
-const REPORTS = [
-  {
-    id: "net-worth",
-    label: "Net Worth",
-    icon: "📈",
-    description: "Total assets minus liabilities over time",
-  },
-  { id: "cash-flow", label: "Cash Flow", icon: "💵", description: "Monthly income vs expenses" },
-  { id: "spending", label: "Spending", icon: "🍩", description: "Spending breakdown by category" },
-  {
-    id: "budget-analysis",
-    label: "Budget vs Actual",
-    icon: "📊",
-    description: "Budgeted vs actual spending per category",
-  },
-  {
-    id: "age-of-money",
-    label: "Age of Money",
-    icon: "⏰",
-    description: "How many days your money lasts",
-  },
-  { id: "custom", label: "Custom Reports", icon: "🔧", description: "Build your own reports" },
-] satisfies ReadonlyArray<{ id: ReportId; label: string; icon: string; description: string }>;
-
 const GRAPH_TYPES = [
   { value: "area", label: "Area Chart" },
   { value: "bar", label: "Bar Chart" },
@@ -103,17 +70,9 @@ const GRAPH_TYPES = [
   { value: "table", label: "Table" },
 ] as const;
 
-export default function AdvancedReports() {
-  const [activeReport, setActiveReport] = createSignal<ReportId>("net-worth");
+export default function CustomReports() {
   const fmt = useCurrency();
   const privacy = usePrivacyMode();
-
-  // Lazy-load report data
-  const [netWorthData, setNetWorthData] = createSignal<TimeSeriesPoint[]>([]);
-  const [cashFlowData, setCashFlowData] = createSignal<BarGroup[]>([]);
-  const [spendingData, setSpendingData] = createSignal<PieSlice[]>([]);
-  const [budgetData, setBudgetData] = createSignal<BudgetPair[]>([]);
-  const [ageOfMoney, setAgeOfMoney] = createSignal<number | null>(null);
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
 
@@ -144,68 +103,9 @@ export default function AdvancedReports() {
     new Map<string, CustomReportResult>(),
   );
 
-  createEffect(() => {
-    const report = activeReport();
-    if (report === "custom") {
-      void loadCustomReports();
-    } else {
-      void loadReport(report);
-    }
-  });
-
   onMount(() => {
-    onCleanup(
-      listenForMoneyDataChanged(() => {
-        const report = activeReport();
-        return report === "custom" ? undefined : loadReport(report);
-      }),
-    );
+    void loadCustomReports();
   });
-
-  async function loadReport(report: ReportId) {
-    setLoading(true);
-    setError(null);
-    try {
-      switch (report) {
-        case "net-worth": {
-          const data = await api.reports.netWorth();
-          setNetWorthData([...data.points]);
-          break;
-        }
-        case "cash-flow": {
-          const data = await api.reports.cashFlow();
-          const groups: BarGroup[] = data.months.map((m) => ({
-            category: m.month,
-            values: [
-              { label: "Income", value: m.income ?? 0, color: CHART_COLORS.income },
-              { label: "Spending", value: m.expense ?? 0, color: CHART_COLORS.spending },
-            ],
-          }));
-          setCashFlowData(groups);
-          break;
-        }
-        case "spending": {
-          const data = await api.reports.spending();
-          setSpendingData([...data.categories]);
-          break;
-        }
-        case "budget-analysis": {
-          const data = await api.reports.budgetAnalysis();
-          setBudgetData([...data.categories]);
-          break;
-        }
-        case "age-of-money": {
-          const data = await api.reports.ageOfMoney();
-          setAgeOfMoney(data.days ?? null);
-          break;
-        }
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to load report`);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   const formatMonth = (dateStr: string) => {
     if (!dateStr || dateStr.length < 7) return dateStr;
@@ -601,176 +501,64 @@ export default function AdvancedReports() {
   }
 
   return (
-    <div class="advanced-reports">
-      <div class="report-tabs">
-        <For each={REPORTS}>
-          {(report) => (
-            <button
-              class="report-tab"
-              classList={{ active: activeReport() === report.id }}
-              onClick={() => setActiveReport(report.id)}
-            >
-              <span>{report.icon}</span>
-              <span>{report.label}</span>
-            </button>
-          )}
-        </For>
-      </div>
+    <div class="custom-reports">
+      <PageState
+        loading={loading()}
+        error={error()}
+        onRetry={loadCustomReports}
+        loadingMessage="Loading custom reports..."
+      >
+        <div class="page-header" style={{ "margin-bottom": "12px" }}>
+          <p class="page-subtitle">Create and manage your own custom reports</p>
+          <button class="btn btn-primary btn-sm" onClick={openCreateModal}>
+            + New Report
+          </button>
+        </div>
 
-      <div class="report-content">
         <Show
-          when={activeReport() !== "custom"}
+          when={customReports().length > 0}
           fallback={
-            <PageState
-              loading={loading()}
-              error={error()}
-              onRetry={loadCustomReports}
-              loadingMessage="Loading custom reports..."
-            >
-              <div class="page-header" style={{ "margin-bottom": "12px" }}>
-                <p class="page-subtitle">Create and manage your own custom reports</p>
-                <button class="btn btn-primary btn-sm" onClick={openCreateModal}>
-                  + New Report
-                </button>
-              </div>
-
-              <Show
-                when={customReports().length > 0}
-                fallback={
-                  <div class="empty-state">
-                    <p>No custom reports yet.</p>
-                    <button class="btn btn-primary btn-sm" onClick={openCreateModal}>
-                      Create your first report
-                    </button>
-                  </div>
-                }
-              >
-                <div class="custom-report-list">
-                  <For each={customReports()}>
-                    {(report) => (
-                      <div class="custom-report-card">
-                        <div class="custom-report-header">
-                          <div>
-                            <strong>{report.name ?? "Untitled Report"}</strong>
-                            <span class="custom-report-meta">
-                              {report.graphType ?? "area"} &middot; {report.startDate ?? "any"} to{" "}
-                              {report.endDate ?? "any"}
-                            </span>
-                          </div>
-                          <div class="custom-report-actions">
-                            <button
-                              class="btn btn-ghost btn-xs"
-                              onClick={() => openEditModal(report)}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              class="btn btn-ghost btn-xs"
-                              onClick={() => {
-                                if (confirm("Delete this report?")) handleDeleteReport(report.id);
-                              }}
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-                        <div class="custom-report-body">{renderCustomReport(report)}</div>
-                      </div>
-                    )}
-                  </For>
-                </div>
-              </Show>
-            </PageState>
+            <div class="empty-state">
+              <p>No custom reports yet.</p>
+              <button class="btn btn-primary btn-sm" onClick={openCreateModal}>
+                Create your first report
+              </button>
+            </div>
           }
         >
-          <PageState
-            loading={loading()}
-            error={error()}
-            onRetry={() => loadReport(activeReport())}
-            loadingMessage="Loading report data..."
-          >
-            <Show when={activeReport() === "net-worth"}>
-              <div class="report-card">
-                <h2 class="report-title">Net Worth Over Time</h2>
-                <p class="report-description">
-                  Your total assets minus liabilities, tracked monthly.
-                </p>
-                <div classList={{ "privacy-blur": privacy().enabled }}>
-                  <AreaChart data={netWorthData()} label="Net worth" formatX={formatMonth} />
-                </div>
-              </div>
-            </Show>
-
-            <Show when={activeReport() === "cash-flow"}>
-              <div class="report-card">
-                <h2 class="report-title">Cash Flow</h2>
-                <p class="report-description">Income versus expenses by month.</p>
-                <div classList={{ "privacy-blur": privacy().enabled }}>
-                  <BarChart groups={cashFlowData()} label="Cash flow" formatX={formatMonth} />
-                </div>
-              </div>
-            </Show>
-
-            <Show when={activeReport() === "spending"}>
-              <div class="report-card">
-                <h2 class="report-title">Spending by Category</h2>
-                <p class="report-description">Where your money went this period.</p>
-                <div classList={{ "privacy-blur": privacy().enabled }}>
-                  <DonutChart slices={spendingData()} label="Spending by category" />
-                </div>
-              </div>
-            </Show>
-
-            <Show when={activeReport() === "budget-analysis"}>
-              <div class="report-card">
-                <h2 class="report-title">Budget vs Actuals</h2>
-                <p class="report-description">How each category compares to its budget.</p>
-                <div classList={{ "privacy-blur": privacy().enabled }}>
-                  <BudgetBar data={budgetData()} label="Budget vs actuals" maxCategories={15} />
-                </div>
-              </div>
-            </Show>
-
-            <Show when={activeReport() === "age-of-money"}>
-              <div class="report-card" style={{ "text-align": "center" }}>
-                <h2 class="report-title">Age of Money</h2>
-                <p class="report-description">
-                  How many days your current cash would last based on average daily spending.
-                </p>
-                <div class="age-display" style={{ padding: "32px" }}>
-                  <Show
-                    when={ageOfMoney() !== null}
-                    fallback={
-                      <span style={{ color: "var(--text-muted)" }}>
-                        Not enough data to calculate
+          <div class="custom-report-list">
+            <For each={customReports()}>
+              {(report) => (
+                <div class="custom-report-card">
+                  <div class="custom-report-header">
+                    <div>
+                      <strong>{report.name ?? "Untitled Report"}</strong>
+                      <span class="custom-report-meta">
+                        {report.graphType ?? "area"} &middot; {report.startDate ?? "any"} to{" "}
+                        {report.endDate ?? "any"}
                       </span>
-                    }
-                  >
-                    <span
-                      class="age-number"
-                      classList={{ "privacy-blur": privacy().enabled }}
-                      style={{ "font-size": "3rem", "font-weight": 700 }}
-                    >
-                      {ageOfMoney()}
-                    </span>
-                    <span
-                      class="age-unit"
-                      style={{
-                        "font-size": "1rem",
-                        color: "var(--text-secondary)",
-                        "margin-left": "8px",
-                      }}
-                    >
-                      days
-                    </span>
-                  </Show>
+                    </div>
+                    <div class="custom-report-actions">
+                      <button class="btn btn-ghost btn-xs" onClick={() => openEditModal(report)}>
+                        Edit
+                      </button>
+                      <button
+                        class="btn btn-ghost btn-xs"
+                        onClick={() => {
+                          if (confirm("Delete this report?")) handleDeleteReport(report.id);
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                  <div class="custom-report-body">{renderCustomReport(report)}</div>
                 </div>
-              </div>
-            </Show>
-          </PageState>
+              )}
+            </For>
+          </div>
         </Show>
-      </div>
-
+      </PageState>
       <Show when={showCreateModal()}>
         <div class="modal-overlay" onClick={() => setShowCreateModal(false)}>
           <div class="modal" onClick={(e) => e.stopPropagation()}>

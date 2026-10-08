@@ -136,9 +136,11 @@ Drizzle D1 batch. The existing settings table stores `money_setup` as a request 
 concurrent first saves cannot create duplicate records. Failed writes retain drafts. Currency reads
 refresh the existing settings cache from the server after completion. No schema migration is needed.
 
-`/reports` defaults to a selected monthly view: income, net expenses, category spending, and
-previous-month percentage comparisons. Category links open that month's Activity. Net worth is
-secondary; older report controls remain in `AdvancedReports.tsx` behind the report menu.
+`/reports` defaults to a selected monthly view: income, net expenses, a category spending donut
+whose colors match the category list, previous-month percentage comparisons, and budget vs spent
+from `GET /api/reports/budget-analysis?month=YYYY-MM` (defaults to the current month). Category
+links open that month's Activity. Net worth, Cash flow (with age of money), and Custom reports
+(`CustomReports.tsx`) are sibling views selected by `?view=`.
 `GET /api/reports/monthly/:month` validates YYYY-MM and uses `src/server/monthly-report.ts` to
 read the two months from D1. `src/domain/monthly-report.ts` owns the shared response schema and
 aggregation: refunds net against category expenses, valid split children replace their parent,

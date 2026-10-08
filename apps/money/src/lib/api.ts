@@ -166,8 +166,13 @@ export const api = {
     netWorth: () => fetchApi(ReportsNetWorthResponseSchema, "/api/reports/net-worth"),
     cashFlow: () => fetchApi(ReportsCashFlowResponseSchema, "/api/reports/cash-flow"),
     spending: () => fetchApi(ReportsSpendingResponseSchema, "/api/reports/spending"),
-    budgetAnalysis: () =>
-      fetchApi(ReportsBudgetAnalysisResponseSchema, "/api/reports/budget-analysis"),
+    budgetAnalysis: (month?: string) =>
+      fetchApi(
+        ReportsBudgetAnalysisResponseSchema,
+        month
+          ? `/api/reports/budget-analysis?month=${encodeURIComponent(month)}`
+          : "/api/reports/budget-analysis",
+      ),
     ageOfMoney: () => fetchApi(ReportsAgeOfMoneyResponseSchema, "/api/reports/age-of-money"),
     crossover: () => fetchApi(ReportsCrossoverResponseSchema, "/api/reports/crossover"),
     calendarHeatmap: () => fetchApi(ReportsHeatmapResponseSchema, "/api/reports/calendar-heatmap"),

@@ -13,6 +13,8 @@ export interface DonutChartProps {
   label: string;
   /** Donut diameter in px. Default 240 */
   size?: number;
+  /** Render the value legend beside the ring. Default true */
+  legend?: boolean;
 }
 
 interface DonutRow {
@@ -104,18 +106,20 @@ export default function DonutChart(props: DonutChartProps) {
           height={props.size ?? 240}
           initialWidth={props.size ?? 240}
         />
-        <ul class="money-chart-legend" aria-label={`${props.label} legend`}>
-          <For each={rows()}>
-            {(row) => (
-              <li>
-                <span class="money-chart-swatch" style={{ background: row.color }} />
-                <span class="money-chart-legend-label">{row.label}</span>
-                <span class="money-chart-legend-value">{fmt().formatCents(row.value)}</span>
-                <span class="money-chart-legend-share">{percent().format(row.share)}</span>
-              </li>
-            )}
-          </For>
-        </ul>
+        <Show when={props.legend ?? true}>
+          <ul class="money-chart-legend" aria-label={`${props.label} legend`}>
+            <For each={rows()}>
+              {(row) => (
+                <li>
+                  <span class="money-chart-swatch" style={{ background: row.color }} />
+                  <span class="money-chart-legend-label">{row.label}</span>
+                  <span class="money-chart-legend-value">{fmt().formatCents(row.value)}</span>
+                  <span class="money-chart-legend-share">{percent().format(row.share)}</span>
+                </li>
+              )}
+            </For>
+          </ul>
+        </Show>
       </div>
     </Show>
   );

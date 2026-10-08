@@ -26,7 +26,7 @@ import {
   computeCrossoverProjection,
   computeMonthBudget,
 } from "../budget-engine";
-import { monthBoundaries } from "../../domain/types";
+import { monthBoundaries, toMonthInt } from "../../domain/types";
 import { buildFilterWhereSql, parseFilterConditions } from "../conditions-to-sql";
 
 type Env = { MONEY_DB: D1Database };
@@ -83,11 +83,15 @@ export function createReportsGroup(env: Env) {
       )
       .handleRaw(
         "budgetAnalysis",
-        wrapHandler(async (): Promise<Response> => {
+        wrapHandler(async (req: Request): Promise<Response> => {
           const db = createDb(env.MONEY_DB);
+          const requested = new URL(req.url).searchParams.get("month");
+          if (requested !== null && !validReportMonth(requested))
+            return Response.json({ error: "Choose a valid report month" }, { status: 400 });
           const now = new Date();
-          const monthInt = now.getFullYear() * 100 + (now.getMonth() + 1);
-          const result = await computeMonthBudget(db, monthInt);
+          const monthKey =
+            requested ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+          const result = await computeMonthBudget(db, toMonthInt(monthKey), monthKey);
           return validatedJson(ReportsBudgetAnalysisResponseSchema, {
             // Activity is signed; the report compares budgets with net outflow.
             categories: (result?.categories ?? [])

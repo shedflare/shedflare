@@ -17,12 +17,13 @@ import { usePrivacyMode } from "../lib/privacy";
 import { currentMonthKey, shiftMonth, categoryTone } from "../lib/budget-view";
 import { validReportMonth } from "../domain/monthly-report";
 import { listenForMoneyDataChanged } from "../lib/data-events";
-import { AreaChart, BarChart, CHART_COLORS, type BarGroup } from "../charts";
+import { AreaChart, BarChart, BudgetBar, CHART_COLORS, DonutChart, type BarGroup } from "../charts";
+import { foldSlices } from "../charts/DonutChart";
 import CategoryBadge from "../components/CategoryBadge";
 import MoneyIcon from "../components/MoneyIcon";
 import { PageState } from "../components/PageState";
 import { useMoneyShell } from "../components/MoneyShellContext";
-const AdvancedReports = lazy(() => import("../components/AdvancedReports"));
+const CustomReports = lazy(() => import("../components/CustomReports"));
 
 function Change(props: { current: number; previous: number; expense?: boolean }) {
   const privacy = usePrivacyMode();
@@ -53,7 +54,7 @@ export default function ReportsPage() {
   const privacy = usePrivacyMode();
   const shell = useMoneyShell();
   const view = () =>
-    params.view === "net-worth" || params.view === "cash-flow" || params.view === "advanced"
+    params.view === "net-worth" || params.view === "cash-flow" || params.view === "custom"
       ? params.view
       : "monthly";
   // Year-spanning axes mark January with its year so repeated month names stay unambiguous.
@@ -72,6 +73,24 @@ export default function ReportsPage() {
     const result = requestValue(monthlyResult());
     return result?.month === month() ? result : undefined;
   };
+  const [budgetResult, { refetch: refetchBudget }] = createResource(
+    () => (view() === "monthly" ? month() : false),
+    (key) => loadRequest(async () => ({ month: key, ...(await api.reports.budgetAnalysis(key)) })),
+  );
+  const budget = () => {
+    const result = requestValue(budgetResult());
+    return result?.month === month() ? result.categories : undefined;
+  };
+  // The donut and the category list share colors, so the list doubles as the donut's legend.
+  const spendingSlices = createMemo(() =>
+    foldSlices(
+      (report()?.categories ?? [])
+        .filter((row) => row.amount > 0)
+        .map((row) => ({ label: row.name, value: row.amount })),
+    ),
+  );
+  const sliceColor = (name: string) =>
+    spendingSlices().find((slice) => slice.label === name)?.color ?? "var(--chart-other)";
   const [worthResult, { refetch: refetchWorth }] = createResource(
     () => view() === "net-worth",
     () =>
@@ -89,7 +108,14 @@ export default function ReportsPage() {
   );
   const [flowResult, { refetch: refetchFlow }] = createResource(
     () => view() === "cash-flow",
-    () => loadRequest(() => api.reports.cashFlow()),
+    () =>
+      loadRequest(async () => {
+        const [cashFlow, age] = await Promise.all([
+          api.reports.cashFlow(),
+          api.reports.ageOfMoney(),
+        ]);
+        return { months: cashFlow.months, ageOfMoney: age.days };
+      }),
   );
   const flow = () => requestValue(flowResult());
   const flowTotals = createMemo(() =>
@@ -113,7 +139,10 @@ export default function ReportsPage() {
   onMount(() =>
     onCleanup(
       listenForMoneyDataChanged(() => {
-        if (view() === "monthly") void refetchMonthly();
+        if (view() === "monthly") {
+          void refetchMonthly();
+          void refetchBudget();
+        }
         if (view() === "net-worth") void refetchWorth();
         if (view() === "cash-flow") void refetchFlow();
       }),
@@ -126,142 +155,133 @@ export default function ReportsPage() {
     <div class="page monthly-reports-page">
       <div class="page-header">
         <h1 class="page-title">Reports</h1>
-        <details class="entity-menu">
-          <summary aria-label="Report actions">
-            <MoneyIcon name="more" />
-          </summary>
-          <div class="entity-menu-popover">
-            <button
-              onClick={(event) => {
-                event.currentTarget.closest("details")?.removeAttribute("open");
-                selectView(view() === "advanced" ? "monthly" : "advanced");
-              }}
-            >
-              {view() === "advanced" ? "Monthly view" : "Advanced reports"}
-            </button>
-          </div>
-        </details>
       </div>
-      <Show
-        when={view() !== "advanced"}
-        fallback={
-          <Suspense fallback={<p class="quiet-empty">Loading…</p>}>
-            <AdvancedReports />
-          </Suspense>
-        }
-      >
-        <div class="report-navigation">
-          <div class="filter-chips" aria-label="Report views">
-            <button
-              classList={{ active: view() === "monthly" }}
-              onClick={() => selectView("monthly")}
-            >
-              Monthly
-            </button>
-            <button
-              classList={{ active: view() === "net-worth" }}
-              onClick={() => selectView("net-worth")}
-            >
-              Net worth
-            </button>
-            <button
-              classList={{ active: view() === "cash-flow" }}
-              onClick={() => selectView("cash-flow")}
-            >
-              Cash flow
-            </button>
-          </div>
-          <Show when={view() === "monthly"}>
-            <div class="month-picker">
-              <button
-                class="btn btn-icon btn-ghost"
-                aria-label="Previous month"
-                onClick={() => setParams({ month: shiftMonth(month(), -1) })}
-              >
-                ‹
-              </button>
-              <label class="month-picker-current">
-                <span>{df().formatMonth(month())}</span>
-                <input
-                  type="month"
-                  aria-label="Report month"
-                  min="1000-01"
-                  value={month()}
-                  onInput={(event) => {
-                    if (validReportMonth(event.currentTarget.value))
-                      setParams({ month: event.currentTarget.value });
-                  }}
-                />
-              </label>
-              <button
-                class="btn btn-icon btn-ghost"
-                aria-label="Next month"
-                onClick={() => setParams({ month: shiftMonth(month(), 1) })}
-              >
-                ›
-              </button>
-            </div>
-          </Show>
+      <div class="report-navigation">
+        <div class="filter-chips" aria-label="Report views">
+          <button
+            classList={{ active: view() === "monthly" }}
+            onClick={() => selectView("monthly")}
+          >
+            Monthly
+          </button>
+          <button
+            classList={{ active: view() === "net-worth" }}
+            onClick={() => selectView("net-worth")}
+          >
+            Net worth
+          </button>
+          <button
+            classList={{ active: view() === "cash-flow" }}
+            onClick={() => selectView("cash-flow")}
+          >
+            Cash flow
+          </button>
+          <button classList={{ active: view() === "custom" }} onClick={() => selectView("custom")}>
+            Custom
+          </button>
         </div>
         <Show when={view() === "monthly"}>
-          <PageState
-            loading={monthlyResult.loading && !report()}
-            error={requestError(monthlyResult())}
-            onRetry={() => void refetchMonthly()}
-          >
-            <Show
-              when={report()?.transactionCount}
-              fallback={
-                <div class="money-empty">
-                  <span class="money-empty-icon">
-                    <MoneyIcon name="chart" size={32} />
-                  </span>
-                  <h2>No activity in {df().formatMonth(month()).split(" ")[0]}</h2>
-                  <Show
-                    when={report()?.hasAccounts}
-                    fallback={
-                      <A class="btn btn-primary" href="/accounts?new=1">
-                        Add account
-                      </A>
-                    }
-                  >
-                    <button class="btn btn-primary" onClick={() => shell.openTransaction()}>
-                      Add transaction
-                    </button>
-                  </Show>
-                </div>
-              }
+          <div class="month-picker">
+            <button
+              class="btn btn-icon btn-ghost"
+              aria-label="Previous month"
+              onClick={() => setParams({ month: shiftMonth(month(), -1) })}
             >
-              <div class="report-metrics">
-                <div class="report-metric">
-                  <span>Income</span>
-                  <strong class={privacy().blurClass()}>
-                    {fmt().formatCents(report()?.income ?? 0)}
-                  </strong>
-                  <Show when={report()?.previous.transactionCount}>
-                    <Change current={report()!.income} previous={report()!.previous.income} />
-                  </Show>
-                </div>
-                <div class="report-metric">
-                  <span>Expenses</span>
-                  <strong class={privacy().blurClass()}>
-                    {fmt().formatCents(report()?.expense ?? 0)}
-                  </strong>
-                  <Show when={report()?.previous.transactionCount}>
-                    <Change
-                      current={report()!.expense}
-                      previous={report()!.previous.expense}
-                      expense
-                    />
-                  </Show>
-                </div>
-              </div>
-              <div class="report-spending-heading">
-                <h2>Spending</h2>
-                <Show when={report()?.previous.transactionCount}>
-                  <span>vs {df().formatMonth(report()!.previous.month).split(" ")[0]}</span>
+              ‹
+            </button>
+            <label class="month-picker-current">
+              <span>{df().formatMonth(month())}</span>
+              <input
+                type="month"
+                aria-label="Report month"
+                min="1000-01"
+                value={month()}
+                onInput={(event) => {
+                  if (validReportMonth(event.currentTarget.value))
+                    setParams({ month: event.currentTarget.value });
+                }}
+              />
+            </label>
+            <button
+              class="btn btn-icon btn-ghost"
+              aria-label="Next month"
+              onClick={() => setParams({ month: shiftMonth(month(), 1) })}
+            >
+              ›
+            </button>
+          </div>
+        </Show>
+      </div>
+      <Show when={view() === "monthly"}>
+        <PageState
+          loading={monthlyResult.loading && !report()}
+          error={requestError(monthlyResult())}
+          onRetry={() => void refetchMonthly()}
+        >
+          <Show
+            when={report()?.transactionCount}
+            fallback={
+              <div class="money-empty">
+                <span class="money-empty-icon">
+                  <MoneyIcon name="chart" size={32} />
+                </span>
+                <h2>No activity in {df().formatMonth(month()).split(" ")[0]}</h2>
+                <Show
+                  when={report()?.hasAccounts}
+                  fallback={
+                    <A class="btn btn-primary" href="/accounts?new=1">
+                      Add account
+                    </A>
+                  }
+                >
+                  <button class="btn btn-primary" onClick={() => shell.openTransaction()}>
+                    Add transaction
+                  </button>
                 </Show>
               </div>
+            }
+          >
+            <div class="report-metrics">
+              <div class="report-metric">
+                <span>Income</span>
+                <strong class={privacy().blurClass()}>
+                  {fmt().formatCents(report()?.income ?? 0)}
+                </strong>
+                <Show when={report()?.previous.transactionCount}>
+                  <Change current={report()!.income} previous={report()!.previous.income} />
+                </Show>
+              </div>
+              <div class="report-metric">
+                <span>Expenses</span>
+                <strong class={privacy().blurClass()}>
+                  {fmt().formatCents(report()?.expense ?? 0)}
+                </strong>
+                <Show when={report()?.previous.transactionCount}>
+                  <Change
+                    current={report()!.expense}
+                    previous={report()!.previous.expense}
+                    expense
+                  />
+                </Show>
+              </div>
+            </div>
+            <div class="report-spending-heading">
+              <h2>Spending</h2>
+              <Show when={report()?.previous.transactionCount}>
+                <span>vs {df().formatMonth(report()!.previous.month).split(" ")[0]}</span>
+              </Show>
+            </div>
+            <div class="report-spending-overview">
+              <Show when={spendingSlices().length}>
+                <div class={`report-spending-donut ${privacy().blurClass()}`}>
+                  <DonutChart
+                    slices={spendingSlices()}
+                    label={`Spending by category, ${df().formatMonth(month())}`}
+                    size={220}
+                    legend={false}
+                  />
+                </div>
+              </Show>
               <div class="report-spending-list">
                 <For each={report()?.categories}>
                   {(row) => (
@@ -279,6 +299,7 @@ export default function ReportsPage() {
                         <strong>{row.name}</strong>
                         <span
                           class={`report-category-track tone-${categoryTone(row.name)} ${privacy().blurClass()}`}
+                          style={row.amount > 0 ? { color: sliceColor(row.name) } : undefined}
                         >
                           <span
                             style={{ width: `${(Math.max(0, row.amount) / maximum()) * 100}%` }}
@@ -298,105 +319,127 @@ export default function ReportsPage() {
                   )}
                 </For>
               </div>
-              <Show when={!report()?.categories.length}>
-                <p class="quiet-empty">No spending this month</p>
-              </Show>
+            </div>
+            <Show when={!report()?.categories.length}>
+              <p class="quiet-empty">No spending this month</p>
             </Show>
-          </PageState>
-        </Show>
-        <Show when={view() === "net-worth"}>
-          <PageState
-            loading={worthResult.loading && !worth()}
-            error={requestError(worthResult())}
-            onRetry={() => void refetchWorth()}
+            <Show when={budget()?.length}>
+              <div class="report-spending-heading report-budget-heading">
+                <h2>Budget vs spent</h2>
+              </div>
+              <div class={`worth-chart ${privacy().blurClass()}`}>
+                <BudgetBar
+                  data={budget() ?? []}
+                  label={`Budget vs spent, ${df().formatMonth(month())}`}
+                />
+              </div>
+            </Show>
+          </Show>
+        </PageState>
+      </Show>
+      <Show when={view() === "net-worth"}>
+        <PageState
+          loading={worthResult.loading && !worth()}
+          error={requestError(worthResult())}
+          onRetry={() => void refetchWorth()}
+        >
+          <Show
+            when={worth()?.accounts.length}
+            fallback={
+              <div class="money-empty">
+                <span class="money-empty-icon">
+                  <MoneyIcon name="accounts" size={32} />
+                </span>
+                <h2>No accounts yet</h2>
+                <A class="btn btn-primary" href="/accounts?new=1">
+                  Add account
+                </A>
+              </div>
+            }
           >
-            <Show
-              when={worth()?.accounts.length}
-              fallback={
-                <div class="money-empty">
-                  <span class="money-empty-icon">
-                    <MoneyIcon name="accounts" size={32} />
-                  </span>
-                  <h2>No accounts yet</h2>
-                  <A class="btn btn-primary" href="/accounts?new=1">
-                    Add account
+            <div class="worth-summary">
+              <span>Net worth</span>
+              <strong class={privacy().blurClass()}>{fmt().formatCents(balance())}</strong>
+            </div>
+            <div class={`worth-chart ${privacy().blurClass()}`}>
+              <AreaChart
+                data={worth()?.points ?? []}
+                label="Net worth"
+                formatX={shortMonth}
+                formatTitle={fullMonth}
+              />
+            </div>
+            <div class="worth-account-list">
+              <For each={worth()?.accounts}>
+                {(account) => (
+                  <A href={`/accounts/${account.id}`}>
+                    <span>{account.name}</span>
+                    <strong class={privacy().blurClass()}>
+                      {fmt().formatCents(account.balanceCurrent)}
+                    </strong>
+                    <MoneyIcon name="chevron" size={15} />
                   </A>
-                </div>
-              }
-            >
-              <div class="worth-summary">
-                <span>Net worth</span>
-                <strong class={privacy().blurClass()}>{fmt().formatCents(balance())}</strong>
+                )}
+              </For>
+            </div>
+          </Show>
+        </PageState>
+      </Show>
+      <Show when={view() === "cash-flow"}>
+        <PageState
+          loading={flowResult.loading && !flow()}
+          error={requestError(flowResult())}
+          onRetry={() => void refetchFlow()}
+        >
+          <Show
+            when={flowTotals().income || flowTotals().expense}
+            fallback={
+              <div class="money-empty">
+                <span class="money-empty-icon">
+                  <MoneyIcon name="chart" size={32} />
+                </span>
+                <h2>No activity in the last year</h2>
+                <button class="btn btn-primary" onClick={() => shell.openTransaction()}>
+                  Add transaction
+                </button>
               </div>
-              <div class={`worth-chart ${privacy().blurClass()}`}>
-                <AreaChart
-                  data={worth()?.points ?? []}
-                  label="Net worth"
-                  formatX={shortMonth}
-                  formatTitle={fullMonth}
-                />
-              </div>
-              <div class="worth-account-list">
-                <For each={worth()?.accounts}>
-                  {(account) => (
-                    <A href={`/accounts/${account.id}`}>
-                      <span>{account.name}</span>
-                      <strong class={privacy().blurClass()}>
-                        {fmt().formatCents(account.balanceCurrent)}
-                      </strong>
-                      <MoneyIcon name="chevron" size={15} />
-                    </A>
-                  )}
-                </For>
-              </div>
-            </Show>
-          </PageState>
-        </Show>
-        <Show when={view() === "cash-flow"}>
-          <PageState
-            loading={flowResult.loading && !flow()}
-            error={requestError(flowResult())}
-            onRetry={() => void refetchFlow()}
+            }
           >
-            <Show
-              when={flowTotals().income || flowTotals().expense}
-              fallback={
-                <div class="money-empty">
-                  <span class="money-empty-icon">
-                    <MoneyIcon name="chart" size={32} />
-                  </span>
-                  <h2>No activity in the last year</h2>
-                  <button class="btn btn-primary" onClick={() => shell.openTransaction()}>
-                    Add transaction
-                  </button>
-                </div>
-              }
-            >
-              <div class="report-metrics">
-                <div class="report-metric">
-                  <span>Income, last 13 months</span>
-                  <strong class={privacy().blurClass()}>
-                    {fmt().formatCents(flowTotals().income)}
-                  </strong>
-                </div>
-                <div class="report-metric">
-                  <span>Spending, last 13 months</span>
-                  <strong class={privacy().blurClass()}>
-                    {fmt().formatCents(flowTotals().expense)}
-                  </strong>
-                </div>
+            <div class="report-metrics">
+              <div class="report-metric">
+                <span>Income, last 13 months</span>
+                <strong class={privacy().blurClass()}>
+                  {fmt().formatCents(flowTotals().income)}
+                </strong>
               </div>
-              <div class={`worth-chart ${privacy().blurClass()}`}>
-                <BarChart
-                  groups={flowGroups()}
-                  label="Income and spending by month"
-                  formatX={shortMonth}
-                  formatTitle={fullMonth}
-                />
+              <div class="report-metric">
+                <span>Spending, last 13 months</span>
+                <strong class={privacy().blurClass()}>
+                  {fmt().formatCents(flowTotals().expense)}
+                </strong>
               </div>
-            </Show>
-          </PageState>
-        </Show>
+              <Show when={flow()?.ageOfMoney != null}>
+                <div class="report-metric">
+                  <span>Age of money</span>
+                  <strong class={privacy().blurClass()}>{flow()?.ageOfMoney} days</strong>
+                </div>
+              </Show>
+            </div>
+            <div class={`worth-chart ${privacy().blurClass()}`}>
+              <BarChart
+                groups={flowGroups()}
+                label="Income and spending by month"
+                formatX={shortMonth}
+                formatTitle={fullMonth}
+              />
+            </div>
+          </Show>
+        </PageState>
+      </Show>
+      <Show when={view() === "custom"}>
+        <Suspense fallback={<p class="quiet-empty">Loading…</p>}>
+          <CustomReports />
+        </Suspense>
       </Show>
     </div>
   );

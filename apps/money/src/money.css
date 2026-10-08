@@ -3036,7 +3036,7 @@ svg {
 }
 .report-metrics {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 24px;
   border-bottom: 1px solid var(--border);
   padding: 12px 0 34px;
@@ -3084,6 +3084,27 @@ svg {
 .report-spending-heading > span {
   font-size: 11px;
   color: var(--text-muted);
+}
+/* The list is the donut's legend: tracks reuse the slice colors. */
+.report-spending-overview {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 36px;
+  align-items: start;
+}
+.report-spending-overview > .report-spending-list:only-child {
+  grid-column: 1 / -1;
+}
+.report-spending-donut {
+  position: sticky;
+  top: 24px;
+  padding-top: 12px;
+}
+.report-budget-heading {
+  margin-top: 44px;
+}
+.report-budget-heading + .worth-chart {
+  margin-top: 8px;
 }
 .report-spending-row {
   display: grid;
@@ -3172,7 +3193,8 @@ svg {
 }
 /* Chart paints: validated light/dark steps (dataviz palette check). Text stays in ink tokens. */
 .money-chart,
-.money-chart-legend {
+.money-chart-legend,
+.report-spending-overview {
   --chart-income: #2f6f9f;
   --chart-spending: #c4672f;
   --chart-neutral: #959d8f;
@@ -3246,7 +3268,8 @@ svg {
 }
 @media (prefers-color-scheme: dark) {
   .money-chart,
-  .money-chart-legend {
+  .money-chart-legend,
+  .report-spending-overview {
     --chart-income: #4f8fc8;
     --chart-spending: #c8763a;
     --chart-neutral: #7c8676;
@@ -3286,10 +3309,6 @@ svg {
 .worth-account-list svg {
   transform: rotate(-90deg);
   color: var(--text-muted);
-}
-.monthly-reports-page > .page-header .entity-menu-popover {
-  top: calc(100% + 4px);
-  bottom: auto;
 }
 .setup-progress {
   display: flex;
@@ -3434,6 +3453,15 @@ svg {
   }
   .report-navigation .month-picker {
     justify-content: space-between;
+  }
+  .report-spending-overview {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  .report-spending-donut {
+    position: static;
+    justify-self: center;
+    width: min(220px, 100%);
   }
   .report-metrics {
     gap: 12px;
