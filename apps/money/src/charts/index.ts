@@ -1,13 +1,11 @@
 /**
- * Charts module — pluggable D3-based chart components for SolidJS.
+ * Charts module — TanStack Charts components themed for Money.
  *
  * Usage:
  *   import { AreaChart, BarChart, DonutChart, BudgetBar } from "../charts";
  *   import type { TimeSeriesPoint, BarGroup, PieSlice, BudgetPair } from "../charts";
  *
- * Each component is a standalone SolidJS component that renders an SVG
- * using D3 for scale/path computation and SolidJS for DOM rendering.
- * No imperative DOM manipulation — fully reactive.
+ * Paints resolve against `.money-chart` custom properties in money.css.
  */
 
 export { default as AreaChart } from "./AreaChart";
@@ -26,12 +24,8 @@ export {
   type BarValue,
   type PieSlice,
   type BudgetPair,
-  type ChartDimensions,
-  type ChartBounds,
   CHART_COLORS,
+  CATEGORY_SLOTS,
   categoryColor,
-  formatChartAmount,
-  formatChartTooltip,
-  defaultDimensions,
-  computeBounds,
+  compactCentsFormatter,
 } from "./types";

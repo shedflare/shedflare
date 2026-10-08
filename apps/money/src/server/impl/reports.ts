@@ -89,11 +89,14 @@ export function createReportsGroup(env: Env) {
           const monthInt = now.getFullYear() * 100 + (now.getMonth() + 1);
           const result = await computeMonthBudget(db, monthInt);
           return validatedJson(ReportsBudgetAnalysisResponseSchema, {
-            categories: (result?.categories ?? []).map((c) => ({
-              category: c.categoryName,
-              budgeted: c.budgeted,
-              actual: c.spent,
-            })),
+            // Activity is signed; the report compares budgets with net outflow.
+            categories: (result?.categories ?? [])
+              .map((c) => ({
+                category: c.categoryName,
+                budgeted: c.budgeted,
+                actual: Math.max(0, -c.spent),
+              }))
+              .filter((c) => c.budgeted > 0 || c.actual > 0),
           });
         }),
       )

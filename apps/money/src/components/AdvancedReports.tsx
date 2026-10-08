@@ -1,5 +1,5 @@
 import { createSignal, createEffect, For, onCleanup, onMount, Show } from "solid-js";
-import { AreaChart, BarChart, DonutChart, BudgetBar } from "../charts";
+import { AreaChart, BarChart, DonutChart, BudgetBar, CHART_COLORS } from "../charts";
 import type { TimeSeriesPoint, BarGroup, PieSlice, BudgetPair } from "../charts";
 import { dispatch } from "../lib/pending-ops";
 import { api } from "../lib/api";
@@ -177,8 +177,8 @@ export default function AdvancedReports() {
           const groups: BarGroup[] = data.months.map((m) => ({
             category: m.month,
             values: [
-              { label: "Income", value: m.income ?? 0, color: "var(--positive)" },
-              { label: "Expenses", value: m.expense ?? 0, color: "var(--negative)" },
+              { label: "Income", value: m.income ?? 0, color: CHART_COLORS.income },
+              { label: "Spending", value: m.expense ?? 0, color: CHART_COLORS.spending },
             ],
           }));
           setCashFlowData(groups);
@@ -532,10 +532,9 @@ export default function AdvancedReports() {
         <div classList={{ "privacy-blur": privacy().enabled }}>
           <AreaChart
             data={points}
-            dimensions={{ width: 700, height: 300, marginBottom: 40 }}
-            fillColor={colors?.balance ?? colors?.expense}
-            strokeColor={colors?.balance ?? colors?.expense}
-            formatValue={fmt().formatCents}
+            label={report.name ?? "Custom report"}
+            color={colors?.balance ?? colors?.expense}
+            formatX={groupBy === "month" ? formatMonth : undefined}
           />
         </div>
       );
@@ -547,16 +546,12 @@ export default function AdvancedReports() {
       if (groupBy === "month") {
         groups = rows.map((row) => ({
           category: row.month ?? "",
-          values: [
-            { label: "Total", value: row.total ?? 0, color: colors?.balance ?? "var(--primary)" },
-          ],
+          values: [{ label: "Total", value: row.total ?? 0, color: colors?.balance }],
         }));
       } else if (groupBy === "category") {
         groups = rows.map((row) => ({
           category: row.category ?? "Uncategorized",
-          values: [
-            { label: "Total", value: row.total ?? 0, color: colors?.balance ?? "var(--primary)" },
-          ],
+          values: [{ label: "Total", value: row.total ?? 0, color: colors?.balance }],
         }));
       } else {
         const dateGroups: Record<string, number> = {};
@@ -565,17 +560,15 @@ export default function AdvancedReports() {
         }
         groups = Object.entries(dateGroups).map(([date, val]) => ({
           category: date,
-          values: [{ label: "Total", value: val, color: colors?.balance ?? "var(--primary)" }],
+          values: [{ label: "Total", value: val, color: colors?.balance }],
         }));
       }
       return (
         <div classList={{ "privacy-blur": privacy().enabled }}>
           <BarChart
             groups={groups}
-            stacked={false}
-            dimensions={{ width: 700, height: 300, marginBottom: 40 }}
-            formatX={formatMonth}
-            formatValue={fmt().formatCents}
+            label={report.name ?? "Custom report"}
+            formatX={groupBy === "month" ? formatMonth : undefined}
           />
         </div>
       );
@@ -585,10 +578,9 @@ export default function AdvancedReports() {
     if (graphType === "donut") {
       let slices: PieSlice[];
       if (groupBy === "category") {
-        slices = rows.map((row, i) => ({
+        slices = rows.map((row) => ({
           label: row.category ?? "Uncategorized",
           value: Math.abs(row.total ?? 0),
-          color: categoryColor(i),
         }));
       } else {
         const catMap: Record<string, number> = {};
@@ -596,41 +588,16 @@ export default function AdvancedReports() {
           const cat = r.category ?? "Uncategorized";
           catMap[cat] = (catMap[cat] ?? 0) + Math.abs(r.amount ?? 0);
         }
-        let i = 0;
-        slices = Object.entries(catMap).map(([label, value]) => ({
-          label,
-          value,
-          color: categoryColor(i++),
-        }));
+        slices = Object.entries(catMap).map(([label, value]) => ({ label, value }));
       }
       return (
         <div classList={{ "privacy-blur": privacy().enabled }}>
-          <DonutChart
-            slices={slices}
-            dimensions={{ width: 500, height: 350 }}
-            formatValue={fmt().formatCents}
-          />
+          <DonutChart slices={slices} label={report.name ?? "Custom report"} />
         </div>
       );
     }
 
     return <div class="chart-placeholder">Unsupported graph type</div>;
-  }
-
-  function categoryColor(index: number): string {
-    const palette = [
-      "#6366f1",
-      "#22c55e",
-      "#f59e0b",
-      "#ef4444",
-      "#a78bfa",
-      "#06b6d4",
-      "#f97316",
-      "#84cc16",
-      "#ec4899",
-      "#14b8a6",
-    ];
-    return palette[index % palette.length];
   }
 
   return (
@@ -729,11 +696,7 @@ export default function AdvancedReports() {
                   Your total assets minus liabilities, tracked monthly.
                 </p>
                 <div classList={{ "privacy-blur": privacy().enabled }}>
-                  <AreaChart
-                    data={netWorthData()}
-                    dimensions={{ width: 700, height: 300, marginBottom: 40 }}
-                    formatValue={fmt().formatCents}
-                  />
+                  <AreaChart data={netWorthData()} label="Net worth" formatX={formatMonth} />
                 </div>
               </div>
             </Show>
@@ -743,13 +706,7 @@ export default function AdvancedReports() {
                 <h2 class="report-title">Cash Flow</h2>
                 <p class="report-description">Income versus expenses by month.</p>
                 <div classList={{ "privacy-blur": privacy().enabled }}>
-                  <BarChart
-                    groups={cashFlowData()}
-                    stacked={false}
-                    dimensions={{ width: 700, height: 300, marginBottom: 40 }}
-                    formatX={formatMonth}
-                    formatValue={fmt().formatCents}
-                  />
+                  <BarChart groups={cashFlowData()} label="Cash flow" formatX={formatMonth} />
                 </div>
               </div>
             </Show>
@@ -759,11 +716,7 @@ export default function AdvancedReports() {
                 <h2 class="report-title">Spending by Category</h2>
                 <p class="report-description">Where your money went this period.</p>
                 <div classList={{ "privacy-blur": privacy().enabled }}>
-                  <DonutChart
-                    slices={spendingData()}
-                    dimensions={{ width: 500, height: 350 }}
-                    formatValue={fmt().formatCents}
-                  />
+                  <DonutChart slices={spendingData()} label="Spending by category" />
                 </div>
               </div>
             </Show>
@@ -773,11 +726,7 @@ export default function AdvancedReports() {
                 <h2 class="report-title">Budget vs Actuals</h2>
                 <p class="report-description">How each category compares to its budget.</p>
                 <div classList={{ "privacy-blur": privacy().enabled }}>
-                  <BudgetBar
-                    data={budgetData()}
-                    maxCategories={15}
-                    formatValue={fmt().formatCents}
-                  />
+                  <BudgetBar data={budgetData()} label="Budget vs actuals" maxCategories={15} />
                 </div>
               </div>
             </Show>

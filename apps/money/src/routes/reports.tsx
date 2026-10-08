@@ -1,7 +1,6 @@
 import {
   createMemo,
   createResource,
-  createSignal,
   For,
   lazy,
   onCleanup,
@@ -18,7 +17,7 @@ import { usePrivacyMode } from "../lib/privacy";
 import { currentMonthKey, shiftMonth, categoryTone } from "../lib/budget-view";
 import { validReportMonth } from "../domain/monthly-report";
 import { listenForMoneyDataChanged } from "../lib/data-events";
-import { AreaChart } from "../charts";
+import { AreaChart, BarChart, CHART_COLORS, type BarGroup } from "../charts";
 import CategoryBadge from "../components/CategoryBadge";
 import MoneyIcon from "../components/MoneyIcon";
 import { PageState } from "../components/PageState";
@@ -53,9 +52,16 @@ export default function ReportsPage() {
   const df = useDateFormat();
   const privacy = usePrivacyMode();
   const shell = useMoneyShell();
-  const [chartWidth, setChartWidth] = createSignal(800);
   const view = () =>
-    params.view === "net-worth" || params.view === "advanced" ? params.view : "monthly";
+    params.view === "net-worth" || params.view === "cash-flow" || params.view === "advanced"
+      ? params.view
+      : "monthly";
+  // Year-spanning axes mark January with its year so repeated month names stay unambiguous.
+  const shortMonth = (key: string) => {
+    const name = df().formatMonth(key).split(" ")[0].slice(0, 3);
+    return key.slice(5, 7) === "01" ? `${name} ’${key.slice(2, 4)}` : name;
+  };
+  const fullMonth = (key: string) => df().formatMonth(key);
   const month = () =>
     params.month && validReportMonth(params.month) ? params.month : currentMonthKey();
   const [monthlyResult, { refetch: refetchMonthly }] = createResource(
@@ -81,6 +87,26 @@ export default function ReportsPage() {
   const balance = createMemo(() =>
     (worth()?.accounts ?? []).reduce((sum, row) => sum + row.balanceCurrent, 0),
   );
+  const [flowResult, { refetch: refetchFlow }] = createResource(
+    () => view() === "cash-flow",
+    () => loadRequest(() => api.reports.cashFlow()),
+  );
+  const flow = () => requestValue(flowResult());
+  const flowTotals = createMemo(() =>
+    (flow()?.months ?? []).reduce(
+      (sum, row) => ({ income: sum.income + row.income, expense: sum.expense + row.expense }),
+      { income: 0, expense: 0 },
+    ),
+  );
+  const flowGroups = createMemo((): BarGroup[] =>
+    (flow()?.months ?? []).map((row) => ({
+      category: row.month,
+      values: [
+        { label: "Income", value: row.income, color: CHART_COLORS.income },
+        { label: "Spending", value: row.expense, color: CHART_COLORS.spending },
+      ],
+    })),
+  );
   const maximum = createMemo(() =>
     Math.max(1, ...(report()?.categories ?? []).map((row) => row.amount)),
   );
@@ -89,6 +115,7 @@ export default function ReportsPage() {
       listenForMoneyDataChanged(() => {
         if (view() === "monthly") void refetchMonthly();
         if (view() === "net-worth") void refetchWorth();
+        if (view() === "cash-flow") void refetchFlow();
       }),
     ),
   );
@@ -136,6 +163,12 @@ export default function ReportsPage() {
               onClick={() => selectView("net-worth")}
             >
               Net worth
+            </button>
+            <button
+              classList={{ active: view() === "cash-flow" }}
+              onClick={() => selectView("cash-flow")}
+            >
+              Cash flow
             </button>
           </div>
           <Show when={view() === "monthly"}>
@@ -295,36 +328,12 @@ export default function ReportsPage() {
                 <span>Net worth</span>
                 <strong class={privacy().blurClass()}>{fmt().formatCents(balance())}</strong>
               </div>
-              <div
-                class={`worth-chart ${privacy().blurClass()}`}
-                ref={(element) => {
-                  const observer = new ResizeObserver((entries) =>
-                    setChartWidth(Math.max(280, entries[0].contentRect.width)),
-                  );
-                  observer.observe(element);
-                  onCleanup(() => observer.disconnect());
-                }}
-              >
+              <div class={`worth-chart ${privacy().blurClass()}`}>
                 <AreaChart
                   data={worth()?.points ?? []}
-                  dimensions={{
-                    width: chartWidth(),
-                    height: chartWidth() < 500 ? 240 : 320,
-                    marginLeft: 64,
-                    marginBottom: 36,
-                  }}
-                  formatValue={fmt().formatCents}
-                  formatY={(value) =>
-                    new Intl.NumberFormat(fmt().code === "IDR" ? "id-ID" : "en-US", {
-                      style: "currency",
-                      currency: fmt().code,
-                      notation: "compact",
-                      maximumFractionDigits: 1,
-                    }).format(value / 100)
-                  }
-                  formatX={(date) => df().formatMonth(date).split(" ")[0].slice(0, 3)}
-                  fillColor="var(--accent)"
-                  strokeColor="var(--accent)"
+                  label="Net worth"
+                  formatX={shortMonth}
+                  formatTitle={fullMonth}
                 />
               </div>
               <div class="worth-account-list">
@@ -339,6 +348,51 @@ export default function ReportsPage() {
                     </A>
                   )}
                 </For>
+              </div>
+            </Show>
+          </PageState>
+        </Show>
+        <Show when={view() === "cash-flow"}>
+          <PageState
+            loading={flowResult.loading && !flow()}
+            error={requestError(flowResult())}
+            onRetry={() => void refetchFlow()}
+          >
+            <Show
+              when={flowTotals().income || flowTotals().expense}
+              fallback={
+                <div class="money-empty">
+                  <span class="money-empty-icon">
+                    <MoneyIcon name="chart" size={32} />
+                  </span>
+                  <h2>No activity in the last year</h2>
+                  <button class="btn btn-primary" onClick={() => shell.openTransaction()}>
+                    Add transaction
+                  </button>
+                </div>
+              }
+            >
+              <div class="report-metrics">
+                <div class="report-metric">
+                  <span>Income, last 13 months</span>
+                  <strong class={privacy().blurClass()}>
+                    {fmt().formatCents(flowTotals().income)}
+                  </strong>
+                </div>
+                <div class="report-metric">
+                  <span>Spending, last 13 months</span>
+                  <strong class={privacy().blurClass()}>
+                    {fmt().formatCents(flowTotals().expense)}
+                  </strong>
+                </div>
+              </div>
+              <div class={`worth-chart ${privacy().blurClass()}`}>
+                <BarChart
+                  groups={flowGroups()}
+                  label="Income and spending by month"
+                  formatX={shortMonth}
+                  formatTitle={fullMonth}
+                />
               </div>
             </Show>
           </PageState>

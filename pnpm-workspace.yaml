@@ -19,6 +19,7 @@ catalog:
   "@effect/platform-node": 4.0.0-beta.92
   "@effect/sql-d1": 4.0.0-beta.92
   "@effect/sql-sqlite-do": 4.0.0-beta.92
+  "@tanstack/charts": ^1.0.0
   "@tanstack/db": ^0.6.5
   "@tanstack/solid-db": ^0.2.19
   "@tanstack/solid-form": ^1.32.0

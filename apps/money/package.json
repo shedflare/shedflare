@@ -36,12 +36,11 @@
     "@shedflare/auth-client": "workspace:*",
     "@solidjs/meta": "^0.29.4",
     "@solidjs/router": "^0.15.4",
+    "@tanstack/charts": "catalog:",
     "@tanstack/solid-form": "catalog:",
     "@tanstack/solid-hotkeys": "catalog:",
-    "d3": "^7.9.0",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
-    "peculiar-charts": "catalog:",
     "solid-js": "^1.9.12"
   },
   "devDependencies": {
@@ -50,7 +49,6 @@
     "@playwright/test": "^1.60.0",
     "@shedflare/auth": "workspace:*",
     "@shedflare/test-utils": "workspace:*",
-    "@types/d3": "^7.4.3",
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
     "alchemy": "catalog:",

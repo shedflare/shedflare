@@ -334,6 +334,7 @@ export async function computeCashFlow(
 }
 
 // -- Spending by category -----------------------------------------------------
+/** Net outflow per visible expense category; amounts are negative cents. */
 export async function computeSpendingByCategory(
   db: Db,
   startDate: string,
@@ -352,9 +353,10 @@ export async function computeSpendingByCategory(
      JOIN categories c ON t.category_id = c.id
      LEFT JOIN category_groups cg ON c.group_id = cg.id
      WHERE t.date >= ${startDate} AND t.date <= ${endDate}
-       AND t.is_child = 0 AND c.hidden = 0
+       AND t.is_child = 0 AND c.hidden = 0 AND c.is_income = 0
      GROUP BY c.id
-     ORDER BY total DESC`,
+     HAVING total < 0
+     ORDER BY total ASC`,
   );
   return rows.map((r) => ({
     categoryId: String(r.id),

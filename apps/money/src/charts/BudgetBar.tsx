@@ -1,218 +1,132 @@
-/**
- * BudgetBar — horizontal grouped bars comparing budgeted vs actual spending.
- * Used for budget analysis (budget vs actuals per category).
- *
- * Pure SolidJS + D3 scales. Fully reactive.
- */
-import { createMemo, For, Show } from "solid-js";
-import * as d3 from "d3";
+import { createMemo, Show } from "solid-js";
 import {
-  type BudgetPair,
-  type ChartDimensions,
-  CHART_COLORS,
-  formatChartAmount,
-  formatChartTooltip,
-} from "./types";
+  barX,
+  colorLegend,
+  colorLegendItems,
+  defineChart,
+  group,
+  type ChartPoint,
+} from "@tanstack/charts";
+import { scaleBand } from "@tanstack/charts/scales/band";
+import { scaleLinear } from "@tanstack/charts/scales/linear";
+import { Chart } from "@tanstack/charts/solid";
+import { tooltip } from "@tanstack/charts/tooltip";
+import { useCurrency } from "../lib/currency";
+import { CHART_COLORS, compactCentsFormatter, type BudgetPair } from "./types";
 
 export interface BudgetBarProps {
-  /** Array of budget vs actual pairs, one per category */
-  data: BudgetPair[];
-  /** Dimension overrides — note: height is auto-computed from row count */
-  dimensions?: Partial<ChartDimensions>;
-  /** Row height in pixels (default 28) */
-  rowHeight?: number;
-  /** Whether to show axis (default true) */
-  showAxis?: boolean;
-  /** Max categories to show (default 15) */
+  data: readonly BudgetPair[];
+  /** Accessible chart name */
+  label: string;
+  /** Show the categories with the largest budget or spending first. Default 10 */
   maxCategories?: number;
-  /** Format money values in labels and tooltips */
-  formatValue?: (v: number) => string;
 }
 
+const SERIES = ["Budgeted", "Spent"] as const;
+type Series = (typeof SERIES)[number];
+
+interface BudgetRow {
+  key: string;
+  category: string;
+  series: Series;
+  value: number;
+  budgeted: number;
+  actual: number;
+}
+
+const ROW_HEIGHT = 34;
+
+/** Budgeted against spent per category, as paired horizontal bars. */
 export default function BudgetBar(props: BudgetBarProps) {
-  const maxCats = () => props.maxCategories ?? 15;
-  const rowH = () => props.rowHeight ?? 28;
-  const headerH = 24;
-  const pad = 16;
-
-  // Sort by absolute difference (most over-budget first)
-  const sorted = createMemo(() =>
+  const fmt = useCurrency();
+  const pairs = createMemo(() =>
     [...props.data]
-      .sort((a, b) => Math.abs(b.actual - b.budgeted) - Math.abs(a.actual - a.budgeted))
-      .slice(0, maxCats()),
+      .sort((a, b) => Math.max(b.budgeted, b.actual) - Math.max(a.budgeted, a.actual))
+      .slice(0, props.maxCategories ?? 10),
   );
-
-  const itemCount = () => sorted().length;
-
-  // Dynamic height based on row count
-  const chartHeight = () => itemCount() * rowH() + headerH + pad;
-  const barAreaWidth = 300;
-  const labelWidth = 140;
-  const totalWidth = labelWidth + barAreaWidth + 10;
-
-  // X scale (shared across all rows)
-  const xScale = createMemo(() => {
-    const data = sorted();
-    if (data.length === 0) return null;
-    const maxVal = d3.max(data, (d) => Math.max(Math.abs(d.budgeted), Math.abs(d.actual))) ?? 1;
-    const padding = maxVal * 0.15 || 1;
-    return d3
-      .scaleLinear()
-      .domain([0, maxVal + padding])
-      .range([0, barAreaWidth]);
-  });
-
-  // Bar positions for each item
-  const bars = createMemo(() => {
-    const xs = xScale();
-    if (!xs) return [];
-
-    return sorted().map((item, i) => {
-      const y = i * rowH() + headerH;
-      const bW = xs(Math.abs(item.budgeted));
-      const aW = xs(Math.abs(item.actual));
-      const over = item.actual < 0 && Math.abs(item.actual) > Math.abs(item.budgeted);
-
-      // Budgeted bar (lighter, behind)
-      const budgetBar = {
-        x: labelWidth,
-        y: y + 4,
-        width: bW,
-        height: rowH() * 0.4,
-        fill: CHART_COLORS.grid,
-      };
-
-      // Actual bar (solid, in front, can be shorter or longer)
-      const actualWidth = Math.min(aW, barAreaWidth);
-      const actualBar = {
-        x: labelWidth,
-        y: y + rowH() * 0.5,
-        width: actualWidth,
-        height: rowH() * 0.4,
-        fill: over ? CHART_COLORS.negative : CHART_COLORS.primary,
-      };
-
-      // Overspend indicator (red extension beyond budget bar)
-      const overshoot = aW > bW ? aW - bW : 0;
-      const overshootBar =
-        overshoot > 4
-          ? {
-              x: labelWidth + bW,
-              y: y + rowH() * 0.5,
-              width: overshoot,
-              height: rowH() * 0.4,
-              fill: CHART_COLORS.negative,
-              opacity: 0.6,
-            }
-          : null;
-
-      return {
-        item,
-        y,
-        budgetBar,
-        actualBar,
-        overshootBar,
-        remaining: Math.abs(item.budgeted) - Math.abs(item.actual),
-      };
+  const definition = createMemo(() => {
+    const money = fmt();
+    const compact = compactCentsFormatter(money.code, money.locale);
+    const rows: BudgetRow[] = pairs().flatMap((pair) =>
+      SERIES.map((series) => ({
+        key: `${pair.category}\u0000${series}`,
+        category: pair.category,
+        series,
+        value: series === "Budgeted" ? pair.budgeted : pair.actual,
+        budgeted: pair.budgeted,
+        actual: pair.actual,
+      })),
+    );
+    return defineChart({
+      chart: ({ width }) => ({
+        marks: [
+          barX(rows, {
+            x: "value",
+            y: "category",
+            color: "series",
+            key: "key",
+            radius: { end: 4 },
+            inset: 1,
+            layout: group({ padding: 0.08 }),
+          }),
+        ],
+        scales: {
+          x: {
+            scale: scaleLinear,
+            nice: true,
+            grid: { strokeOpacity: 0.12 },
+            axis: { line: false, ticks: { count: width < 480 ? 3 : 5, format: compact } },
+          },
+          y: {
+            scale: () => scaleBand<string>().padding(0.28),
+            axis: { line: false, ticks: { size: 0 } },
+          },
+        },
+      }),
+      color: {
+        domain: [...SERIES],
+        range: [CHART_COLORS.budget, CHART_COLORS.spending],
+        legend: colorLegend({
+          placement: "top",
+          items: colorLegendItems({ justify: "start", gap: 18 }),
+        }),
+      },
+      focus: "group-y",
+      tooltip: {
+        use: tooltip,
+        content: (points: readonly ChartPoint<BudgetRow>[]) => {
+          const row = points[0]?.datum;
+          if (!row) return { title: "", rows: [] };
+          const left = row.budgeted - row.actual;
+          return {
+            title: row.category,
+            rows: [
+              ...[...points]
+                .sort((a, b) => SERIES.indexOf(a.datum.series) - SERIES.indexOf(b.datum.series))
+                .map((point) => ({
+                  label: point.datum.series,
+                  value: money.formatCents(point.datum.value),
+                  color: point.color,
+                })),
+              {
+                label: left >= 0 ? "Left" : "Over",
+                value: money.formatCents(Math.abs(left)),
+              },
+            ],
+          };
+        },
+      },
     });
   });
-
   return (
-    <Show when={itemCount() > 0} fallback={<EmptyChart />}>
-      <div class="chart-container">
-        <svg
-          viewBox={`0 0 ${totalWidth} ${chartHeight()}`}
-          style={{ width: "100%", height: "auto", display: "block" }}
-          preserveAspectRatio="xMidYMid meet"
-        >
-          {/* Header */}
-          <text x={0} y={14} fill="var(--text-secondary)" font-size="11" font-weight="600">
-            Category
-          </text>
-          <text
-            x={labelWidth + barAreaWidth}
-            y={14}
-            text-anchor="end"
-            fill="var(--text-secondary)"
-            font-size="11"
-            font-weight="600"
-          >
-            Budgeted vs Spent
-          </text>
-
-          {/* Rows */}
-          <For each={bars()}>
-            {(row) => (
-              <g>
-                {/* Category label */}
-                <text
-                  x={0}
-                  y={row.y + rowH() / 2 + 4}
-                  fill="var(--text)"
-                  font-size="12"
-                  text-overflow="ellipsis"
-                  style={{ "max-width": `${labelWidth}px` }}
-                >
-                  {row.item.category.length > 22
-                    ? row.item.category.slice(0, 20) + "..."
-                    : row.item.category}
-                </text>
-
-                {/* Budget bar (background) */}
-                <rect {...row.budgetBar} rx="2" opacity="0.3" />
-
-                {/* Overshoot indicator */}
-                <Show when={row.overshootBar}>
-                  <rect {...row.overshootBar!} rx="2" />
-                </Show>
-
-                {/* Actual bar */}
-                <rect {...row.actualBar} rx="2" opacity="0.85">
-                  <title>
-                    {`${row.item.category}: Budgeted ${formatChartTooltip(row.item.budgeted, props.formatValue)}, Spent ${formatChartTooltip(row.item.actual, props.formatValue)}`}
-                  </title>
-                </rect>
-
-                {/* Value labels */}
-                <text
-                  x={labelWidth + barAreaWidth + 6}
-                  y={row.y + rowH() / 2 - 2}
-                  fill="var(--text-secondary)"
-                  font-size="10"
-                >
-                  B: {formatChartAmount(row.item.budgeted, props.formatValue)}
-                </text>
-                <text
-                  x={labelWidth + barAreaWidth + 6}
-                  y={row.y + rowH() / 2 + 12}
-                  fill="var(--text)"
-                  font-size="10"
-                >
-                  S: {formatChartAmount(row.item.actual, props.formatValue)}
-                </text>
-              </g>
-            )}
-          </For>
-        </svg>
-      </div>
+    <Show when={pairs().length} fallback={<p class="chart-empty">No data for this period</p>}>
+      <Chart
+        class="money-chart"
+        definition={definition()}
+        ariaLabel={props.label}
+        height={Math.max(160, pairs().length * ROW_HEIGHT + 72)}
+        initialWidth={640}
+      />
     </Show>
-  );
-}
-
-function EmptyChart() {
-  return (
-    <div
-      class="chart-empty"
-      style={{
-        height: "100px",
-        display: "flex",
-        "align-items": "center",
-        "justify-content": "center",
-        color: "var(--text-muted)",
-        "font-size": "0.9rem",
-      }}
-    >
-      No budget data for this period
-    </div>
   );
 }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vite-plus/test";
 import { formatCentsValue } from "./currency";
-import { formatChartAmount, formatChartTooltip } from "../charts/types";
+import { compactCentsFormatter } from "../charts/types";
 import { createRoot } from "solid-js";
 import { useCurrency } from "./currency";
 import { setSetting } from "./settings-store";
@@ -33,11 +33,9 @@ describe("formatCentsValue", () => {
     expect(formatCentsValue(1_000_000_000_00, "USD")).toBe("$1,000,000,000.00");
   });
 
-  test("chart formatters can use the selected display currency", () => {
-    const formatIdr = (cents: number) => formatCentsValue(cents, "IDR");
-
-    expect(formatChartAmount(123_456, formatIdr)).toBe("Rp1.235");
-    expect(formatChartTooltip(-123_456, formatIdr)).toBe("-Rp1.235");
+  test("chart axis ticks use compact amounts in the display currency", () => {
+    expect(compactCentsFormatter("USD", "en-US")(1_234_500)).toBe("$12.3K");
+    expect(compactCentsFormatter("USD", "en-US")(-50_000)).toBe("-$500");
   });
 
   test("currency defaults react to persisted settings and preserve explicit format choices", () => {
