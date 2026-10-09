@@ -42,6 +42,7 @@ export const budgetGroup = HttpApiGroup.make("budget").add(
 export const payeesGroup = HttpApiGroup.make("payees").add(
   HttpApiEndpoint.get("list", "/api/payees"),
   HttpApiEndpoint.get("suggestions", "/api/payees/category-suggestions"),
+  HttpApiEndpoint.get("history", "/api/payees/history"),
 );
 
 // ── Schedules ───────────────────────────────────────────────────────

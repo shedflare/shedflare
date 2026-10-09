@@ -1,4 +1,5 @@
 import { MonthlyReportSchema } from "../domain/monthly-report";
+import { PayeeHistorySchema } from "../domain/payee-history";
 /**
  * Schema-validated REST API client for the money app.
  * Every response is decoded against an Effect Schema at runtime.
@@ -146,6 +147,7 @@ export const api = {
   budgetMonth: (monthInt: number) => fetchApi(MonthBudgetResponseSchema, `/api/budget/${monthInt}`),
 
   payees: () => fetchApi(PayeesResponseSchema, "/api/payees"),
+  payeeHistory: () => fetchApi(PayeeHistorySchema, "/api/payees/history"),
   payeeSuggestions: (payee: string) =>
     fetchApi(
       PayeeSuggestionsResponseSchema,

@@ -4,6 +4,7 @@ import { moneyApi } from "../definitions";
 import { createDb } from "../d1-access";
 import { wrapHandler, validatedJson } from "./wrap-handler";
 import { PayeesResponseSchema, PayeeSuggestionsResponseSchema } from "../../domain/schemas";
+import { PayeeHistorySchema, payeeHistory } from "../../domain/payee-history";
 
 type Env = { MONEY_DB: D1Database };
 
@@ -60,6 +61,35 @@ export function createPayeesGroup(env: Env) {
            GROUP BY t.category_id ORDER BY count DESC LIMIT 5`,
           );
           return validatedJson(PayeeSuggestionsResponseSchema, { suggestions: rows });
+        }),
+      )
+      .handleRaw(
+        "history",
+        // One grouped scan per form open; the client filters it while the owner types.
+        wrapHandler(async (): Promise<Response> => {
+          const db = createDb(env.MONEY_DB);
+          const rows = await db.all<{
+            payee: string;
+            category_id: string | null;
+            uses: number;
+            last_date: string;
+          }>(
+            sql`SELECT payee, category_id, COUNT(*) AS uses, MAX(date) AS last_date
+           FROM transactions
+           WHERE payee IS NOT NULL AND payee <> '' AND is_child = 0
+             AND transfer_id IS NULL AND starting_balance_flag = 0
+           GROUP BY payee, category_id`,
+          );
+          return validatedJson(PayeeHistorySchema, {
+            payees: payeeHistory(
+              rows.map((row) => ({
+                payee: row.payee,
+                categoryId: row.category_id,
+                uses: Number(row.uses),
+                lastDate: row.last_date,
+              })),
+            ),
+          });
         }),
       ),
   );

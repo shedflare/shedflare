@@ -14,7 +14,9 @@ import {
   type BudgetCategory,
   type CategoryDefinition,
 } from "../lib/budget-view";
-import { monthBoundaries, toMonthInt } from "../domain/types";
+import { formatCalendarDate, monthBoundaries, toMonthInt } from "../domain/types";
+import { categoryBalanceSeries } from "../lib/category-balance";
+import CategoryBalanceChart from "../charts/CategoryBalanceChart";
 import { useMoneyShell } from "./MoneyShellContext";
 import MoneyDialog from "./MoneyDialog";
 import MoneyIcon from "./MoneyIcon";
@@ -75,10 +77,34 @@ export default function CategoryDrawer(props: {
       }),
   );
   const activity = () => requestValue(activityResult());
+  /** Schedules only matter while part of the month is still ahead. */
+  const [schedulesResult, { refetch: refetchSchedules }] = createResource(
+    () => props.month >= formatCalendarDate(new Date()).slice(0, 7),
+    () => loadRequest(() => api.schedules()),
+  );
+  const balance = createMemo(() => {
+    const loaded = activity();
+    if (!loaded) return null;
+    return categoryBalanceSeries({
+      month: props.month,
+      categoryId: props.category.categoryId,
+      leftover: props.category.leftover,
+      spent: props.category.spent,
+      transactions: loaded.transactions.filter((transaction) => !transaction.isParent),
+      payments: requestValue(schedulesResult())?.schedules ?? [],
+      today: formatCalendarDate(new Date()),
+    });
+  });
+  const scheduledTotal = () =>
+    (balance()?.projected ?? []).reduce(
+      (sum, point) => point.scheduled.reduce((total, payment) => total + payment.amount, sum),
+      0,
+    );
   onMount(() =>
     onCleanup(
       listenForMoneyDataChanged(() => {
         void refetch();
+        void refetchSchedules();
       }),
     ),
   );
@@ -361,7 +387,38 @@ export default function CategoryDrawer(props: {
                   )}
                 </strong>
               </span>
+              <Show when={scheduledTotal()}>
+                <span>
+                  After scheduled
+                  <strong classList={{ negative: props.category.leftover + scheduledTotal() < 0 }}>
+                    {fmt().formatCents(props.category.leftover + scheduledTotal())}
+                  </strong>
+                </span>
+              </Show>
             </div>
+            <Show when={balance()}>
+              {(series) => (
+                <figure class={`category-balance-chart ${privacy().blurClass()}`}>
+                  <CategoryBalanceChart
+                    series={series()}
+                    label={`${props.category.categoryName} available balance`}
+                    formatDay={(date) => df().formatDate(date)}
+                  />
+                  <Show when={series().projected.length}>
+                    <figcaption class="category-balance-legend">
+                      <span>
+                        <i class="legend-line" />
+                        Available
+                      </span>
+                      <span>
+                        <i class="legend-line is-dashed" />
+                        Expected after scheduled
+                      </span>
+                    </figcaption>
+                  </Show>
+                </figure>
+              )}
+            </Show>
             <div class="section-heading">
               <h3>Activity</h3>
               <button

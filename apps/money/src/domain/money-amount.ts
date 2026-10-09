@@ -55,3 +55,27 @@ export function formatAmountInput(
   }
   return (amount / 100).toFixed(2).replace(".", separators.decimal);
 }
+
+/**
+ * Normalizes an amount while it is typed: digits only, thousands regrouped, and up to two
+ * decimals for USD. The result parses with `parseAmountInput` once a trailing decimal
+ * separator is dropped.
+ */
+export function formatAmountTyping(
+  value: string,
+  currency: CurrencyCode,
+  numberFormat = resolveNumberFormat(currency),
+): string {
+  const separators = NUMBER_FORMAT_SEPS[numberFormat];
+  const decimalAt = currency === "USD" ? value.indexOf(separators.decimal) : -1;
+  const whole = (decimalAt < 0 ? value : value.slice(0, decimalAt))
+    .replace(/\D/g, "")
+    .replace(/^0+(?=\d)/, "")
+    .replace(/\B(?=(\d{3})+(?!\d))/g, separators.thousands);
+  if (decimalAt < 0) return whole;
+  const fraction = value
+    .slice(decimalAt + 1)
+    .replace(/\D/g, "")
+    .slice(0, 2);
+  return `${whole || "0"}${separators.decimal}${fraction}`;
+}

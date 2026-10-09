@@ -1,9 +1,11 @@
-import { createSignal, For, onCleanup, Show } from "solid-js";
+import { createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { dispatch, requireCommandId } from "../lib/pending-ops";
 import { api } from "../lib/api";
 import { useCurrency } from "../lib/currency";
 import { emitMoneyDataChanged } from "../lib/data-events";
 import { formatCalendarDate } from "../domain/types";
+import { formatAmountTyping, NUMBER_FORMAT_SEPS } from "../domain/money-amount";
+import { findPayee, matchPayees, type PayeeHistoryEntry } from "../domain/payee-history";
 import type { AccountsResponse, CategoriesResponse } from "../domain/schemas-client";
 import MoneyDialog from "./MoneyDialog";
 import MoneyIcon from "./MoneyIcon";
@@ -45,35 +47,99 @@ export default function AddTransactionModal(props: AddTransactionModalProps) {
   const [saving, setSaving] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   let amountInput: HTMLInputElement | undefined;
-  let debounce: ReturnType<typeof setTimeout> | undefined;
-  let suggestionRequest = 0;
   let categoryChosen = Boolean(props.initialCategoryId);
-  onCleanup(() => {
-    clearTimeout(debounce);
-    suggestionRequest++;
+  // Payee history loads once per open; matching and category suggestions then stay in memory.
+  const [history, setHistory] = createSignal<readonly PayeeHistoryEntry[]>([]);
+  const [payeeOpen, setPayeeOpen] = createSignal(false);
+  const [payeeActive, setPayeeActive] = createSignal(-1);
+  const payeeMatches = createMemo(() => (payeeOpen() ? matchPayees(history(), payee()) : []));
+  const categoryLabel = (id: string | null) => {
+    const definition = props.categories.find((item) => item.id === id);
+    return definition ? definition.name : "";
+  };
+  onMount(() => {
+    api.payeeHistory().then(
+      (result) => setHistory(result.payees),
+      () => {
+        /* Without history the payee field is plain text entry. */
+      },
+    );
   });
-  function suggest(value: string) {
+  function suggestCategory(name: string) {
+    if (categoryChosen) return;
+    const definition = props.categories.find(
+      (item) => item.id === findPayee(history(), name)?.categoryId,
+    );
+    if (definition && (definition.isIncome ?? false) === (kind() === "income"))
+      setCategory(definition.id);
+  }
+  function typePayee(value: string) {
     setPayee(value);
-    clearTimeout(debounce);
-    const request = ++suggestionRequest;
-    if (!value.trim() || categoryChosen) return;
-    debounce = setTimeout(async () => {
-      try {
-        const result = await api.payeeSuggestions(value.trim());
-        if (request !== suggestionRequest || categoryChosen) return;
-        const suggested = result.suggestions[0]?.category_id;
-        const definition = props.categories.find((item) => item.id === suggested);
-        if (definition && (definition.isIncome ?? false) === (kind() === "income"))
-          setCategory(definition.id);
-      } catch {
-        /* A suggestion failure never blocks entry. */
-      }
-    }, 250);
+    setPayeeOpen(true);
+    setPayeeActive(-1);
+    suggestCategory(value);
+  }
+  function choosePayee(entry: PayeeHistoryEntry) {
+    setPayee(entry.name);
+    setPayeeOpen(false);
+    suggestCategory(entry.name);
+  }
+  function payeeKeyDown(event: KeyboardEvent) {
+    const matches = payeeMatches();
+    if (!matches.length) return;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      // Cycles through the options and back to the typed text (-1).
+      setPayeeActive(
+        (index) => ((index + 1 + step + matches.length + 1) % (matches.length + 1)) - 1,
+      );
+    } else if (event.key === "Enter" && matches[payeeActive()]) {
+      event.preventDefault();
+      choosePayee(matches[payeeActive()]);
+    } else if (event.key === "Escape") {
+      // Close the list without letting the dialog treat Escape as cancel.
+      event.preventDefault();
+      event.stopPropagation();
+      setPayeeOpen(false);
+    }
+  }
+  function typeAmount(input: HTMLInputElement, inputType: string) {
+    const money = fmt();
+    let caret = input.selectionStart ?? input.value.length;
+    let raw = input.value;
+    const { decimal } = NUMBER_FORMAT_SEPS[money.numberFormat];
+    const significant = (text: string) => {
+      let count = 0;
+      for (let index = 0; index < text.length; index++)
+        if (/\d/.test(text[index]) || (money.code === "USD" && text[index] === decimal)) count++;
+      return count;
+    };
+    // Backspacing over a grouping separator removes the digit before it instead.
+    if (
+      inputType === "deleteContentBackward" &&
+      significant(raw) === significant(amount()) &&
+      caret > 0
+    ) {
+      raw = raw.slice(0, caret - 1) + raw.slice(caret);
+      caret--;
+    }
+    const formatted = formatAmountTyping(raw, money.code, money.numberFormat);
+    // Keep the caret after the same digit it followed before separators moved.
+    const before = significant(raw.slice(0, caret));
+    let position = 0;
+    for (let seen = 0; position < formatted.length && seen < before; position++)
+      if (significant(formatted[position])) seen++;
+    setAmount(formatted);
+    input.value = formatted;
+    input.setSelectionRange(position, position);
   }
   async function save(event: SubmitEvent) {
     event.preventDefault();
     if (saving()) return;
-    const cents = fmt().parseInput(amount());
+    const { decimal } = NUMBER_FORMAT_SEPS[fmt().numberFormat];
+    const typed = amount();
+    const cents = fmt().parseInput(typed.endsWith(decimal) ? typed.slice(0, -1) : typed);
     if (!Number.isSafeInteger(cents) || cents <= 0) {
       setError("Enter an amount greater than zero.");
       amountInput?.focus();
@@ -132,7 +198,6 @@ export default function AddTransactionModal(props: AddTransactionModalProps) {
           : (props.initialCategoryId ?? ""),
       );
       categoryChosen = kind() === "income" || Boolean(props.initialCategoryId);
-      suggestionRequest++;
       amountInput?.focus();
     } else props.onClose();
     setSaving(false);
@@ -154,7 +219,7 @@ export default function AddTransactionModal(props: AddTransactionModalProps) {
               setKind("expense");
               setCategory("");
               categoryChosen = false;
-              suggestionRequest++;
+              suggestCategory(payee());
             }}
           >
             Expense
@@ -167,7 +232,6 @@ export default function AddTransactionModal(props: AddTransactionModalProps) {
               setKind("income");
               setCategory(props.categories.find((item) => item.isIncome)?.id ?? "");
               categoryChosen = true;
-              suggestionRequest++;
             }}
           >
             Income
@@ -186,20 +250,53 @@ export default function AddTransactionModal(props: AddTransactionModalProps) {
             placeholder="0"
             required
             value={amount()}
-            onInput={(event) => setAmount(event.currentTarget.value)}
+            onInput={(event) => typeAmount(event.currentTarget, event.inputType)}
             disabled={saving()}
           />
         </label>
         <div class="form-group">
           <label for="transaction-payee">{kind() === "expense" ? "Payee" : "From"}</label>
-          <input
-            id="transaction-payee"
-            type="text"
-            placeholder={kind() === "expense" ? "Where?" : "Who?"}
-            value={payee()}
-            onInput={(event) => suggest(event.currentTarget.value)}
-            disabled={saving()}
-          />
+          <div class="payee-combobox">
+            <input
+              id="transaction-payee"
+              type="text"
+              role="combobox"
+              autocomplete="off"
+              aria-autocomplete="list"
+              aria-controls="transaction-payee-options"
+              aria-expanded={payeeMatches().length > 0}
+              aria-activedescendant={
+                payeeActive() >= 0 ? `transaction-payee-option-${payeeActive()}` : undefined
+              }
+              placeholder={kind() === "expense" ? "Where?" : "Who?"}
+              value={payee()}
+              onInput={(event) => typePayee(event.currentTarget.value)}
+              onKeyDown={payeeKeyDown}
+              onBlur={() => setPayeeOpen(false)}
+              disabled={saving()}
+            />
+            <Show when={payeeMatches().length}>
+              <ul class="payee-options" id="transaction-payee-options" role="listbox">
+                <For each={payeeMatches()}>
+                  {(entry, index) => (
+                    <li
+                      id={`transaction-payee-option-${index()}`}
+                      role="option"
+                      aria-selected={payeeActive() === index()}
+                      // Pointer down keeps focus in the input so blur does not close the list first.
+                      onPointerDown={(event) => {
+                        event.preventDefault();
+                        choosePayee(entry);
+                      }}
+                    >
+                      <span>{entry.name}</span>
+                      <span>{categoryLabel(entry.categoryId)}</span>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </Show>
+          </div>
         </div>
         <div class="form-group">
           <label for="transaction-category">Category</label>
@@ -208,7 +305,6 @@ export default function AddTransactionModal(props: AddTransactionModalProps) {
             value={category()}
             onChange={(event) => {
               categoryChosen = true;
-              suggestionRequest++;
               setCategory(event.currentTarget.value);
             }}
             disabled={saving()}

@@ -220,7 +220,11 @@ Reconciled balances and linked/split transactions are locked in the everyday dra
 retains their existing controls. Activity reads transactions and edit metadata as one retryable
 request and ignores superseded filter responses. There is no second transaction store.
 CategoryDrawer's Activity reads `/api/transactions` with category and month date comparisons;
-matching split children remain visible. Invalid inline or saved filter conditions return 400
+matching split children remain visible. The same rows draw its daily available-balance chart
+(`src/lib/category-balance.ts`); for current and future months it also reads `/api/schedules` and
+projects the category's scheduled payments (overdue ones today) as a dashed line to month end.
+The Add transaction modal reads `/api/payees/history` once on open (one grouped scan of
+transactions) and matches payees and their usual category in memory while typing. Invalid inline or saved filter conditions return 400
 instead of falling back to an unfiltered ledger.
 
 `/accounts/:id` opens the same activity feed with its live balance, account switcher, Add, and

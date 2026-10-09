@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
-import { parseAmountInput, formatAmountInput } from "./money-amount";
+import { parseAmountInput, formatAmountInput, formatAmountTyping } from "./money-amount";
 import { createFuzzRandom } from "../test/fuzz";
 
 describe("rupiah amount entry", () => {
@@ -54,5 +54,25 @@ describe("rupiah amount entry", () => {
           amount,
         );
     }
+  });
+});
+
+describe("amount typing", () => {
+  test("rupiah keeps digits only and regroups thousands", () => {
+    expect(formatAmountTyping("58000", "IDR")).toBe("58.000");
+    expect(formatAmountTyping("58.0001", "IDR")).toBe("580.001");
+    expect(formatAmountTyping("1a2b3,4", "IDR")).toBe("1.234");
+    expect(formatAmountTyping("007", "IDR")).toBe("7");
+    expect(parseAmountInput(formatAmountTyping("1250000", "IDR"), "IDR")).toBe(125_000_000);
+  });
+
+  test("dollars allow one decimal separator with up to two decimals", () => {
+    expect(formatAmountTyping("1234", "USD")).toBe("1,234");
+    expect(formatAmountTyping("1234.", "USD")).toBe("1,234.");
+    expect(formatAmountTyping("1234.567", "USD")).toBe("1,234.56");
+    expect(formatAmountTyping(".5", "USD")).toBe("0.5");
+    expect(formatAmountTyping("12.3.4", "USD")).toBe("12.34");
+    expect(formatAmountTyping("-$9x9", "USD")).toBe("99");
+    expect(parseAmountInput(formatAmountTyping("1234.5", "USD"), "USD")).toBe(123_450);
   });
 });
