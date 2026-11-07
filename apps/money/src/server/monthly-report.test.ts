@@ -53,6 +53,7 @@ describe("monthly reports", () => {
       { categoryId: null, name: "Uncategorized", icon: null, amount: 500, previousAmount: 0 },
     ]);
     expect(report.categories.reduce((sum, row) => sum + row.amount, 0)).toBe(report.expense);
+    expect(report.days).toEqual([{ date: "2026-10-01", income: 3_500_000_300, expense: 1800 }]);
   });
   test("valid split children retain context across month boundaries; closed accounts remain in history", async () => {
     const db = dbFor(createMoneyTestEnv());
@@ -85,5 +86,24 @@ describe("monthly reports", () => {
     expect(monthlyReport("2024-02", [row], [], true).expense).toBe(100);
     expect(monthlyReport("2024-03", [row], [], true).previous.expense).toBe(100);
     expect(() => monthlyReport("2026-13", [], [], false)).toThrow();
+  });
+  test("daily totals follow the month rules and skip transfers", () => {
+    const base = { accountId: "account", categoryId: null };
+    const report = monthlyReport(
+      "2026-10",
+      [
+        createTransaction({ ...base, date: "2026-10-03", amount: -500 }),
+        createTransaction({ ...base, date: "2026-10-03", amount: 2000 }),
+        createTransaction({ ...base, date: "2026-10-02", amount: -100 }),
+        createTransaction({ ...base, date: "2026-10-05", amount: -900, transferId: "paired" }),
+        createTransaction({ ...base, date: "2026-09-30", amount: -700 }),
+      ],
+      [],
+      true,
+    );
+    expect(report.days).toEqual([
+      { date: "2026-10-02", income: 0, expense: 100 },
+      { date: "2026-10-03", income: 2000, expense: 500 },
+    ]);
   });
 });

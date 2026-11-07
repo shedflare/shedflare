@@ -6,11 +6,15 @@ import type { RecurringPayment } from "./recurring-view";
 export type PaymentAction = "record" | "skip" | "pause" | "archive";
 
 /** Runs a payment action with its undo inverse and refreshes every open view on success. */
-export async function runPaymentAction(original: RecurringPayment, kind: PaymentAction) {
+export async function runPaymentAction(
+  original: RecurringPayment,
+  kind: PaymentAction,
+  options: { date?: string } = {},
+) {
   if (kind === "record") {
     await dispatch(
       "post_schedule_transaction",
-      { scheduleId: original.id, date: formatCalendarDate(new Date()) },
+      { scheduleId: original.id, date: options.date ?? formatCalendarDate(new Date()) },
       {
         undoInfo: {
           label: "Payment recorded",

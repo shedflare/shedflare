@@ -102,8 +102,12 @@ verification before use as implementation instructions.
 
 Money has two working views instead of one page per feature. `/` (Overview, `src/routes/index.tsx`)
 is what happened: month income/expense/net from `/api/reports/monthly/:month`, category availability,
-net worth, alerts, and `src/components/ActivityPanel.tsx` (the feed/ledger, search, and URL filters
-`q`, `view`, `category`, `account`, `focus`; `month=all` for all time). Its rail lists accounts,
+net worth, alerts, and `src/components/ActivityPanel.tsx` (the feed/ledger/calendar, search, and URL
+filters `q`, `view`, `category`, `account`, `focus`; `month=all` for all time). Its Calendar layout
+reuses `SpendingCalendar.tsx` with day totals from the filtered activity (`dailyActivityTotals`). Both calendars
+mark days with scheduled payments (`scheduledByDay`) and list them in the day detail
+(`ScheduledDay.tsx`); the next occurrence records in one click, dated on its day or today if early. In the
+current month, payments still overdue from earlier months are listed on today. Its rail lists accounts,
 upcoming payments with one-click Record, and category spending; selecting an account or category
 filters the activity in place. `/plan` (`src/routes/plan.tsx`) combines budget, recurring, and trend
 context for one month: an editable grid of assigned, spent, available, remaining scheduled spending
@@ -139,11 +143,13 @@ refresh the existing settings cache from the server after completion. No schema 
 `/reports` defaults to a selected monthly view: income, net expenses, a category spending donut
 whose colors match the category list, previous-month percentage comparisons, and budget vs spent
 from `GET /api/reports/budget-analysis?month=YYYY-MM` (defaults to the current month). Category
-links open that month's Activity. Net worth, Cash flow (with age of money), and Custom reports
-(`CustomReports.tsx`) are sibling views selected by `?view=`.
+links open that month's Activity. Calendar (`ReportCalendar.tsx`, `?view=calendar&day=`), Net
+worth, Cash flow (with age of money), and Custom reports (`CustomReports.tsx`) are sibling views
+selected by `?view=`. Calendar (`SpendingCalendar.tsx` grid) shades each day from the monthly report's `days` totals and lists a
+selected day's transactions from `/api/transactions` date conditions.
 `GET /api/reports/monthly/:month` validates YYYY-MM and uses `src/server/monthly-report.ts` to
 read the two months from D1. `src/domain/monthly-report.ts` owns the shared response schema and
-aggregation: refunds net against category expenses, valid split children replace their parent,
+aggregation, including per-day totals: refunds net against category expenses, valid split children replace their parent,
 and transfers/opening entries stay out. Hidden categories and closed accounts retain historical
 activity. Month changes ignore stale payloads; failed reads expose Retry.
 `GET /api/reports/cash-flow` uses the same D1 report loader and monthly aggregation, including

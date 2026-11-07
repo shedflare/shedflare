@@ -1381,6 +1381,61 @@ svg {
 .composer-detail-fields {
   padding: 7px 0;
 }
+.composer-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 21px 0;
+  padding: 7px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.composer-inline-picker {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  max-width: 45%;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.composer-inline-picker:hover,
+.composer-inline-picker:focus-within {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.composer-inline-picker > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer-inline-picker > select,
+.composer-inline-picker > input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.composer-inline-note {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+.composer-inline-note:focus {
+  outline: none;
+}
+.composer-inline-note::placeholder {
+  color: var(--text-muted);
+}
 .composer-footer {
   display: flex;
   align-items: center;
@@ -1843,7 +1898,10 @@ svg {
   }
   .form-group input,
   .form-group select,
-  .form-group textarea {
+  .form-group textarea,
+  .composer-inline-note,
+  .composer-inline-picker > select,
+  .composer-inline-picker > input {
     font-size: 16px;
   }
   .composer-amount {
@@ -3260,7 +3318,75 @@ svg {
 /* Chart paints: validated light/dark steps (dataviz palette check). Text stays in ink tokens. */
 .money-chart,
 .money-chart-legend,
-.report-spending-overview {
+.report-spending-overview,
+.report-calendar,
+.report-calendar-date {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.report-calendar-due {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+}
+.report-calendar-due.is-overdue {
+  background: color-mix(in srgb, var(--negative) 16%, transparent);
+  color: var(--negative);
+}
+.calendar-scheduled {
+  margin-bottom: 18px;
+}
+.calendar-scheduled h3 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.calendar-scheduled-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.calendar-scheduled-name {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+  color: var(--text);
+  text-decoration: none;
+}
+.calendar-scheduled-name > strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.calendar-scheduled-name > small {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.calendar-scheduled-row.is-overdue .calendar-scheduled-name > small {
+  color: var(--negative);
+}
+.calendar-scheduled-amount {
+  font-size: 13px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+.calendar-scheduled-row .btn {
+  flex: none;
+}
+.report-calendar-legend {
   --chart-income: #2f6f9f;
   --chart-spending: #c4672f;
   --chart-neutral: #959d8f;
@@ -3335,7 +3461,9 @@ svg {
 @media (prefers-color-scheme: dark) {
   .money-chart,
   .money-chart-legend,
-  .report-spending-overview {
+  .report-spending-overview,
+  .report-calendar,
+  .report-calendar-legend {
     --chart-income: #4f8fc8;
     --chart-spending: #c8763a;
     --chart-neutral: #7c8676;
@@ -3347,6 +3475,146 @@ svg {
     --ts-chart-6: #008300;
     --ts-chart-7: #9085e9;
     --ts-chart-8: #e66767;
+  }
+}
+/* Reports calendar: spending shade steps mix the spending paint into the card surface. */
+.report-calendar {
+  display: grid;
+  gap: 4px;
+}
+.report-calendar-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+.report-calendar-weekday {
+  padding: 0 6px 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.report-calendar-day {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  min-height: 74px;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.report-calendar-day:hover {
+  border-color: var(--text-muted);
+}
+.report-calendar-day:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.report-calendar-day.is-today .report-calendar-date {
+  color: var(--accent);
+  font-weight: 700;
+}
+.report-calendar-day.is-future {
+  opacity: 0.55;
+}
+.report-calendar-day.is-selected {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.report-calendar-date {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.report-calendar-spent,
+.report-calendar-income {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.report-calendar-spent {
+  font-weight: 600;
+}
+.report-calendar-income {
+  color: var(--chart-income);
+}
+.report-calendar-day.level-1,
+.report-calendar-swatch.level-1 {
+  background: color-mix(in srgb, var(--chart-spending) 12%, var(--bg-card));
+}
+.report-calendar-day.level-2,
+.report-calendar-swatch.level-2 {
+  background: color-mix(in srgb, var(--chart-spending) 26%, var(--bg-card));
+}
+.report-calendar-day.level-3,
+.report-calendar-swatch.level-3 {
+  background: color-mix(in srgb, var(--chart-spending) 42%, var(--bg-card));
+}
+.report-calendar-day.level-4,
+.report-calendar-swatch.level-4 {
+  background: color-mix(in srgb, var(--chart-spending) 60%, var(--bg-card));
+}
+.report-calendar-legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin: 12px 0 30px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.report-calendar-legend > span:first-child {
+  margin-right: 4px;
+}
+.report-calendar-legend > span:last-child {
+  margin-left: 4px;
+}
+.report-calendar-swatch {
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-card);
+}
+.report-metric > strong small {
+  font-size: 0.5em;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+.report-calendar-detail {
+  margin-top: 10px;
+}
+@media (max-width: 600px) {
+  .report-calendar,
+  .report-calendar-row {
+    gap: 2px;
+  }
+  .report-calendar-weekday {
+    padding: 0 0 4px;
+    text-align: center;
+    font-size: 10px;
+  }
+  .report-calendar-day {
+    align-items: center;
+    min-height: 52px;
+    padding: 5px 2px;
+    border-radius: var(--radius-sm);
+  }
+  .report-calendar-spent,
+  .report-calendar-income {
+    font-size: 10px;
+  }
+  .report-calendar-income {
+    display: none;
   }
 }
 @media (max-width: 560px) {
@@ -4849,6 +5117,21 @@ a.ws-stat:hover {
 }
 .activity-panel-toolbar .filter-chips {
   padding: 0;
+}
+.activity-layout {
+  flex: none;
+  padding: 3px;
+}
+.activity-layout > button {
+  flex: none;
+  padding: 5px 10px;
+}
+.activity-layout > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.activity-panel .report-calendar {
+  margin-top: 4px;
 }
 .activity-panel-filters {
   display: flex;

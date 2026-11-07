@@ -15,6 +15,10 @@ export const MonthlyReportSchema = Schema.Struct({
     expense: Schema.Number,
     transactionCount: Schema.Number,
   }),
+  /** Days of the selected month with activity, ascending; same rules as the month totals. */
+  days: Schema.Array(
+    Schema.Struct({ date: Schema.String, income: Schema.Number, expense: Schema.Number }),
+  ),
   categories: Schema.Array(
     Schema.Struct({
       categoryId: Schema.NullOr(Schema.String),
@@ -75,18 +79,24 @@ export function monthlyReport(
     let income = 0;
     let expense = 0;
     const activityIds = new Set<string>();
+    const days = new Map<string, { income: number; expense: number }>();
     for (const row of rows) {
       if (row.isParent || (row.isChild && (!row.parentId || !parents.has(row.parentId)))) continue;
       activityIds.add(row.isChild ? row.parentId! : row.id);
       const category = row.categoryId ? definitionMap.get(row.categoryId) : undefined;
-      if (category?.isIncome || (!category && row.amount > 0)) income += row.amount;
-      else {
+      const day = days.get(row.date) ?? { income: 0, expense: 0 };
+      days.set(row.date, day);
+      if (category?.isIncome || (!category && row.amount > 0)) {
+        income += row.amount;
+        day.income += row.amount;
+      } else {
         expense -= row.amount;
+        day.expense -= row.amount;
         const id = category?.id ?? null;
         spending.set(id, (spending.get(id) ?? 0) - row.amount);
       }
     }
-    return { income, expense, transactionCount: activityIds.size, spending };
+    return { income, expense, transactionCount: activityIds.size, spending, days };
   }
   const current = period(month);
   const previous = period(previousMonth);
@@ -103,6 +113,10 @@ export function monthlyReport(
       expense: previous.expense,
       transactionCount: previous.transactionCount,
     },
+    days: [...current.days]
+      .map(([date, totals]) => ({ date, ...totals }))
+      .filter((row) => row.income !== 0 || row.expense !== 0)
+      .sort((a, b) => a.date.localeCompare(b.date)),
     categories: [...categoryIds]
       .map((categoryId) => {
         const category = categoryId ? definitionMap.get(categoryId) : undefined;

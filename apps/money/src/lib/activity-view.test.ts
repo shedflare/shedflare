@@ -1,7 +1,12 @@
 import { describe, expect, test } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 import { CategoryIdSchema, AccountIdSchema, TransactionIdSchema } from "../domain/types";
-import { activityEntries, activityTotals, filterActivity } from "./activity-view";
+import {
+  activityEntries,
+  activityTotals,
+  dailyActivityTotals,
+  filterActivity,
+} from "./activity-view";
 import type { TransactionsResponse } from "../domain/schemas-client";
 
 type Transaction = TransactionsResponse["transactions"][number];
@@ -84,6 +89,15 @@ describe("everyday activity", () => {
       transaction("uncategorized", { amount: -100 }),
     ];
     expect(activityTotals(rows, false)).toEqual({ income: 1000, expense: 100 });
+    expect(
+      dailyActivityTotals(
+        [...rows, transaction("earlier", { date: "2026-09-30", amount: -50 })],
+        false,
+      ),
+    ).toEqual([
+      { date: "2026-09-30", income: 0, expense: 50 },
+      { date: rows[2].date, income: 1000, expense: 100 },
+    ]);
     expect(
       filterActivity(rows, { month: null, view: "uncategorized", query: "" }).map((row) => row.id),
     ).toEqual(["uncategorized"]);

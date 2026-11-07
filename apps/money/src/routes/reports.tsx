@@ -16,6 +16,7 @@ import { useDateFormat } from "../lib/date-format";
 import { usePrivacyMode } from "../lib/privacy";
 import { currentMonthKey, shiftMonth, categoryTone } from "../lib/budget-view";
 import { validReportMonth } from "../domain/monthly-report";
+import { parseCalendarDate } from "../domain/types";
 import { listenForMoneyDataChanged } from "../lib/data-events";
 import { AreaChart, BarChart, BudgetBar, CHART_COLORS, DonutChart, type BarGroup } from "../charts";
 import { foldSlices } from "../charts/DonutChart";
@@ -24,6 +25,7 @@ import MoneyIcon from "../components/MoneyIcon";
 import { PageState } from "../components/PageState";
 import { useMoneyShell } from "../components/MoneyShellContext";
 const CustomReports = lazy(() => import("../components/CustomReports"));
+const ReportCalendar = lazy(() => import("../components/ReportCalendar"));
 
 function Change(props: { current: number; previous: number; expense?: boolean }) {
   const privacy = usePrivacyMode();
@@ -48,13 +50,16 @@ function Change(props: { current: number; previous: number; expense?: boolean })
   );
 }
 export default function ReportsPage() {
-  const [params, setParams] = useSearchParams<{ month?: string; view?: string }>();
+  const [params, setParams] = useSearchParams<{ month?: string; view?: string; day?: string }>();
   const fmt = useCurrency();
   const df = useDateFormat();
   const privacy = usePrivacyMode();
   const shell = useMoneyShell();
   const view = () =>
-    params.view === "net-worth" || params.view === "cash-flow" || params.view === "custom"
+    params.view === "calendar" ||
+    params.view === "net-worth" ||
+    params.view === "cash-flow" ||
+    params.view === "custom"
       ? params.view
       : "monthly";
   // Year-spanning axes mark January with its year so repeated month names stay unambiguous.
@@ -65,8 +70,12 @@ export default function ReportsPage() {
   const fullMonth = (key: string) => df().formatMonth(key);
   const month = () =>
     params.month && validReportMonth(params.month) ? params.month : currentMonthKey();
+  const monthScoped = () => view() === "monthly" || view() === "calendar";
+  const selectedDay = () =>
+    params.day?.slice(0, 7) === month() && parseCalendarDate(params.day) ? params.day : undefined;
+  const setMonth = (next: string) => setParams({ month: next, day: undefined });
   const [monthlyResult, { refetch: refetchMonthly }] = createResource(
-    () => (view() === "monthly" ? month() : false),
+    () => (monthScoped() ? month() : false),
     (key) => loadRequest(() => api.reports.monthly(key)),
   );
   const report = () => {
@@ -139,17 +148,15 @@ export default function ReportsPage() {
   onMount(() =>
     onCleanup(
       listenForMoneyDataChanged(() => {
-        if (view() === "monthly") {
-          void refetchMonthly();
-          void refetchBudget();
-        }
+        if (monthScoped()) void refetchMonthly();
+        if (view() === "monthly") void refetchBudget();
         if (view() === "net-worth") void refetchWorth();
         if (view() === "cash-flow") void refetchFlow();
       }),
     ),
   );
   function selectView(next: string) {
-    setParams({ view: next === "monthly" ? undefined : next });
+    setParams({ view: next === "monthly" ? undefined : next, day: undefined });
   }
   return (
     <div class="page monthly-reports-page">
@@ -163,6 +170,12 @@ export default function ReportsPage() {
             onClick={() => selectView("monthly")}
           >
             Monthly
+          </button>
+          <button
+            classList={{ active: view() === "calendar" }}
+            onClick={() => selectView("calendar")}
+          >
+            Calendar
           </button>
           <button
             classList={{ active: view() === "net-worth" }}
@@ -180,12 +193,12 @@ export default function ReportsPage() {
             Custom
           </button>
         </div>
-        <Show when={view() === "monthly"}>
+        <Show when={monthScoped()}>
           <div class="month-picker">
             <button
               class="btn btn-icon btn-ghost"
               aria-label="Previous month"
-              onClick={() => setParams({ month: shiftMonth(month(), -1) })}
+              onClick={() => setMonth(shiftMonth(month(), -1))}
             >
               ‹
             </button>
@@ -198,14 +211,14 @@ export default function ReportsPage() {
                 value={month()}
                 onInput={(event) => {
                   if (validReportMonth(event.currentTarget.value))
-                    setParams({ month: event.currentTarget.value });
+                    setMonth(event.currentTarget.value);
                 }}
               />
             </label>
             <button
               class="btn btn-icon btn-ghost"
               aria-label="Next month"
-              onClick={() => setParams({ month: shiftMonth(month(), 1) })}
+              onClick={() => setMonth(shiftMonth(month(), 1))}
             >
               ›
             </button>
@@ -334,6 +347,25 @@ export default function ReportsPage() {
                 />
               </div>
             </Show>
+          </Show>
+        </PageState>
+      </Show>
+      <Show when={view() === "calendar"}>
+        <PageState
+          loading={monthlyResult.loading && !report()}
+          error={requestError(monthlyResult())}
+          onRetry={() => void refetchMonthly()}
+        >
+          <Show when={report()}>
+            {(current) => (
+              <Suspense fallback={<p class="quiet-empty">Loading…</p>}>
+                <ReportCalendar
+                  report={current()}
+                  selectedDay={selectedDay()}
+                  onSelectDay={(day) => setParams({ day }, { replace: true })}
+                />
+              </Suspense>
+            )}
           </Show>
         </PageState>
       </Show>

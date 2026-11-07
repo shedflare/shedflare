@@ -92,3 +92,44 @@ export function paymentOccurrences(payment: RecurringPayment, from: string, to: 
   }
   return dates;
 }
+
+export type ScheduledOccurrence = {
+  payment: RecurringPayment;
+  date: string;
+  /** Only the next occurrence can be recorded; later ones follow once it is. */
+  isNext: boolean;
+};
+
+/**
+ * Upcoming occurrences of active payments within [start, end], keyed by the day they are shown.
+ * When `today` is in range, payments still due from before `start` are shown on today, keeping
+ * their original due date.
+ */
+export function scheduledByDay(
+  payments: readonly RecurringPayment[],
+  start: string,
+  end: string,
+  today?: string,
+): Map<string, ScheduledOccurrence[]> {
+  const days = new Map<string, ScheduledOccurrence[]>();
+  const carryOver = today !== undefined && today >= start && today <= end;
+  for (const payment of orderedPayments(payments)) {
+    const next = paymentDate(payment);
+    if (carryOver && next && next < start && paymentOccurrences(payment, next, next).length) {
+      const rows = days.get(today) ?? [];
+      rows.push({ payment, date: next, isNext: true });
+      days.set(today, rows);
+    }
+    for (const date of paymentOccurrences(payment, start, end)) {
+      const rows = days.get(date) ?? [];
+      rows.push({ payment, date, isNext: date === next });
+      days.set(date, rows);
+    }
+  }
+  return days;
+}
+
+/** A recorded payment is dated on its scheduled day, or today when paid ahead of time. */
+export function recordDate(occurrence: string, today: string): string {
+  return occurrence < today ? occurrence : today;
+}

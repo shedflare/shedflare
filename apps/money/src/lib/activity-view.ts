@@ -38,22 +38,32 @@ export function filterActivity(
   const ids = new Set(matches.map((row) => row.id));
   return rows.filter((row) => ids.has(row.id) || parentIds.has(row.id));
 }
-export function activityTotals(rows: readonly Transaction[], categoryFiltered: boolean) {
+function countedActivity(rows: readonly Transaction[], categoryFiltered: boolean) {
   const ids = new Set(rows.map((row) => row.id));
-  return rows
-    .filter(
-      (row) =>
-        !row.transferId &&
-        !row.startingBalanceFlag &&
-        (categoryFiltered
-          ? !row.isParent
-          : !row.isChild || !row.parentId || !ids.has(row.parentId)),
-    )
-    .reduce(
-      (totals, row) => ({
-        income: totals.income + Math.max(0, row.amount),
-        expense: totals.expense + Math.max(0, -row.amount),
-      }),
-      { income: 0, expense: 0 },
-    );
+  return rows.filter(
+    (row) =>
+      !row.transferId &&
+      !row.startingBalanceFlag &&
+      (categoryFiltered ? !row.isParent : !row.isChild || !row.parentId || !ids.has(row.parentId)),
+  );
+}
+export function activityTotals(rows: readonly Transaction[], categoryFiltered: boolean) {
+  return countedActivity(rows, categoryFiltered).reduce(
+    (totals, row) => ({
+      income: totals.income + Math.max(0, row.amount),
+      expense: totals.expense + Math.max(0, -row.amount),
+    }),
+    { income: 0, expense: 0 },
+  );
+}
+/** Per-date totals matching `activityTotals`, ascending by date. */
+export function dailyActivityTotals(rows: readonly Transaction[], categoryFiltered: boolean) {
+  const days = new Map<string, { date: string; income: number; expense: number }>();
+  for (const row of countedActivity(rows, categoryFiltered)) {
+    const day = days.get(row.date) ?? { date: row.date, income: 0, expense: 0 };
+    day.income += Math.max(0, row.amount);
+    day.expense += Math.max(0, -row.amount);
+    days.set(row.date, day);
+  }
+  return [...days.values()].sort((a, b) => a.date.localeCompare(b.date));
 }

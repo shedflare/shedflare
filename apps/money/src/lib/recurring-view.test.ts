@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vite-plus/test";
-import { paymentOccurrences, type RecurringPayment } from "./recurring-view";
+import {
+  paymentOccurrences,
+  recordDate,
+  scheduledByDay,
+  type RecurringPayment,
+} from "./recurring-view";
 
 function payment(fields: Partial<RecurringPayment> = {}): RecurringPayment {
   return {
@@ -80,5 +85,51 @@ describe("paymentOccurrences", () => {
         "2026-11-30",
       ),
     ).toEqual(["2026-09-10", "2026-10-12", "2026-11-12"]);
+  });
+});
+
+describe("scheduledByDay", () => {
+  test("lists each occurrence on its day and marks only the next one recordable", () => {
+    const weekly = payment({
+      id: "sch_weekly",
+      name: "Lunch",
+      recurrenceRules: JSON.stringify({ type: "weekly" }),
+      nextDate: "2026-10-06",
+    });
+    const paused = payment({ id: "sch_paused", active: false, nextDate: "2026-10-06" });
+    const days = scheduledByDay([weekly, payment(), paused], "2026-10-01", "2026-10-31");
+    expect([...days.keys()].toSorted()).toEqual([
+      "2026-10-06",
+      "2026-10-13",
+      "2026-10-17",
+      "2026-10-20",
+      "2026-10-27",
+    ]);
+    expect(days.get("2026-10-06")?.map((row) => [row.payment.id, row.isNext])).toEqual([
+      ["sch_weekly", true],
+    ]);
+    expect(days.get("2026-10-13")?.[0].isNext).toBe(false);
+    expect(days.get("2026-10-17")?.[0]).toMatchObject({ isNext: true, payment: { id: "sch_1" } });
+  });
+
+  test("shows payments overdue from earlier months on today, keeping their due date", () => {
+    const overdue = payment({ id: "sch_late", nextDate: "2026-09-30" });
+    const days = scheduledByDay([overdue], "2026-10-01", "2026-10-31", "2026-10-12");
+    expect(days.get("2026-10-12")).toEqual([
+      { payment: overdue, date: "2026-09-30", isNext: true },
+    ]);
+    expect(days.get("2026-10-30")?.[0]).toMatchObject({ date: "2026-10-30", isNext: false });
+    // Other months, and paused payments, are left as they are.
+    expect(scheduledByDay([overdue], "2026-11-01", "2026-11-30", "2026-10-12").size).toBe(1);
+    expect(
+      scheduledByDay([{ ...overdue, active: false }], "2026-10-01", "2026-10-31", "2026-10-12")
+        .size,
+    ).toBe(0);
+  });
+
+  test("records overdue payments on their day and early payments today", () => {
+    expect(recordDate("2026-11-03", "2026-11-07")).toBe("2026-11-03");
+    expect(recordDate("2026-11-07", "2026-11-07")).toBe("2026-11-07");
+    expect(recordDate("2026-11-20", "2026-11-07")).toBe("2026-11-07");
   });
 });

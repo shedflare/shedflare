@@ -3,8 +3,15 @@ import { useSearchParams } from "@solidjs/router";
 import TransactionFilters from "./TransactionFilters";
 import TransactionTable from "./TransactionTable";
 import ActivityFeed from "./ActivityFeed";
+import SpendingCalendar from "./SpendingCalendar";
+import { ScheduledDayList, useScheduledPayments } from "./ScheduledDay";
 import TransactionDrawer from "./TransactionDrawer";
-import { activityEntries, activityTotals, filterActivity } from "../lib/activity-view";
+import {
+  activityEntries,
+  activityTotals,
+  dailyActivityTotals,
+  filterActivity,
+} from "../lib/activity-view";
 import { useCurrency } from "../lib/currency";
 import { usePrivacyMode } from "../lib/privacy";
 import { PageState } from "./PageState";
@@ -68,7 +75,15 @@ export default function ActivityPanel(props: {
   const shell = useMoneyShell();
   const fmt = useCurrency();
   const privacy = usePrivacyMode();
-  const [ledger, setLedger] = createSignal(false);
+  const [chosenLayout, setChosenLayout] = createSignal<"feed" | "ledger" | "calendar">("feed");
+  const [selectedDay, setSelectedDay] = createSignal<string>();
+  // All time has no single month to lay out, so the calendar falls back to the feed.
+  const layout = () => (chosenLayout() === "calendar" && !props.month ? "feed" : chosenLayout());
+  const ledger = () => layout() === "ledger";
+  function chooseLayout(next: "feed" | "ledger" | "calendar") {
+    setChosenLayout(next);
+    setSearchParams({ focus: undefined }, { replace: true });
+  }
   const [searchParams, setSearchParams] = useSearchParams<ActivityParams>();
   const [transactions, setTransactions] = createSignal<ApiTransactionRow[]>([]);
   const [categories, setCategories] = createSignal<CategoryRow[]>([]);
@@ -162,6 +177,14 @@ export default function ActivityPanel(props: {
   }
 
   const selected = createMemo(() => transactions().find((row) => row.id === searchParams.focus));
+  const scheduled = useScheduledPayments(() => (layout() === "calendar" ? props.month : null));
+  const calendarDays = createMemo(() =>
+    dailyActivityTotals(visibleTransactions(), Boolean(searchParams.category)),
+  );
+  const calendarDay = () => {
+    const day = selectedDay();
+    return day && props.month && day.slice(0, 7) === props.month ? day : undefined;
+  };
   const totals = createMemo(() =>
     activityTotals(visibleTransactions(), Boolean(searchParams.category)),
   );
@@ -260,18 +283,33 @@ export default function ActivityPanel(props: {
             Uncategorized
           </button>
         </div>
-        <button
-          class="btn btn-secondary btn-sm"
-          aria-pressed={ledger()}
-          onClick={() => {
-            setLedger(!ledger());
-            setSearchParams({ focus: undefined }, { replace: true });
-          }}
-          title={ledger() ? "Switch to the grouped feed" : "Switch to the editable ledger"}
-        >
-          <MoneyIcon name="activity" size={15} />
-          {ledger() ? "Feed" : "Ledger"}
-        </button>
+        <div class="segmented-control activity-layout" aria-label="Activity layout">
+          <button
+            classList={{ active: layout() === "feed" }}
+            aria-pressed={layout() === "feed"}
+            title="Grouped feed"
+            onClick={() => chooseLayout("feed")}
+          >
+            Feed
+          </button>
+          <button
+            classList={{ active: layout() === "ledger" }}
+            aria-pressed={layout() === "ledger"}
+            title="Editable ledger"
+            onClick={() => chooseLayout("ledger")}
+          >
+            Ledger
+          </button>
+          <button
+            classList={{ active: layout() === "calendar" }}
+            aria-pressed={layout() === "calendar"}
+            disabled={!props.month}
+            title={props.month ? "Daily spending calendar" : "Choose a month to see its calendar"}
+            onClick={() => chooseLayout("calendar")}
+          >
+            Calendar
+          </button>
+        </div>
       </div>
 
       <div class="activity-panel-filters">
@@ -367,16 +405,48 @@ export default function ActivityPanel(props: {
             </div>
           }
         >
-          <Show
-            when={ledger()}
-            fallback={
-              <ActivityFeed
-                transactions={visibleTransactions()}
-                categories={categories()}
-                onSelect={(id) => setSearchParams({ focus: id })}
+          <Show when={layout() === "feed"}>
+            <ActivityFeed
+              transactions={visibleTransactions()}
+              categories={categories()}
+              onSelect={(id) => setSearchParams({ focus: id })}
+            />
+          </Show>
+          <Show when={layout() === "calendar" && props.month} keyed>
+            {(month) => (
+              <SpendingCalendar
+                month={month}
+                days={calendarDays()}
+                selectedDay={calendarDay()}
+                onSelectDay={setSelectedDay}
+                scheduledMark={scheduled.mark}
+                detail={(day) => {
+                  const rows = () => visibleTransactions().filter((row) => row.date === day.date);
+                  const due = () => scheduled.byDay().get(day.date) ?? [];
+                  return (
+                    <>
+                      <ScheduledDayList items={due()} accounts={scheduled.accounts()} />
+                      <Show
+                        when={activityEntries(rows()).length}
+                        fallback={
+                          <Show when={!due().length}>
+                            <p class="quiet-empty">No transactions on this day</p>
+                          </Show>
+                        }
+                      >
+                        <ActivityFeed
+                          transactions={rows()}
+                          categories={categories()}
+                          onSelect={(id) => setSearchParams({ focus: id })}
+                        />
+                      </Show>
+                    </>
+                  );
+                }}
               />
-            }
-          >
+            )}
+          </Show>
+          <Show when={ledger()}>
             <TransactionTable
               transactions={visibleTransactions().map(toTransactionRow)}
               categories={categories().map((row) => ({
@@ -442,7 +512,7 @@ export default function ActivityPanel(props: {
             children={transactions().filter((row) => row.parentId === id)}
             tags={txTags()[id] ?? []}
             onClose={() => setSearchParams({ focus: undefined }, { replace: true })}
-            onLedger={() => setLedger(true)}
+            onLedger={() => setChosenLayout("ledger")}
           />
         )}
       </Show>

@@ -324,51 +324,54 @@ export default function AddTransactionModal(props: AddTransactionModalProps) {
             </For>
           </select>
         </div>
-        <details class="composer-details">
-          <summary>
-            <MoneyIcon name="accounts" size={17} />
+        <div class="composer-inline">
+          <label class="composer-inline-picker" title="Account">
+            <MoneyIcon name="accounts" size={16} />
             <span>
               {props.accounts.find((account) => account.id === accountId())?.name ?? "Account"}
             </span>
+            <select
+              aria-label="Account"
+              value={accountId()}
+              onChange={(event) => setAccountId(event.currentTarget.value)}
+              disabled={saving()}
+            >
+              <For each={props.accounts.filter((account) => !account.closed)}>
+                {(account) => <option value={account.id}>{account.name}</option>}
+              </For>
+            </select>
+          </label>
+          <input
+            class="composer-inline-note"
+            aria-label="Note"
+            placeholder="Add a note"
+            value={notes()}
+            onInput={(event) => setNotes(event.currentTarget.value)}
+            disabled={saving()}
+          />
+          <label class="composer-inline-picker" title="Date">
+            <MoneyIcon name="calendar" size={16} />
             <span>{date() === formatCalendarDate(new Date()) ? "Today" : date()}</span>
-            <MoneyIcon name="settings" size={16} />
-          </summary>
-          <div class="composer-detail-fields">
-            <div class="form-group">
-              <label for="transaction-account">Account</label>
-              <select
-                id="transaction-account"
-                value={accountId()}
-                onChange={(event) => setAccountId(event.currentTarget.value)}
-                disabled={saving()}
-              >
-                <For each={props.accounts.filter((account) => !account.closed)}>
-                  {(account) => <option value={account.id}>{account.name}</option>}
-                </For>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="transaction-date">Date</label>
-              <input
-                id="transaction-date"
-                type="date"
-                required
-                value={date()}
-                onInput={(event) => setDate(event.currentTarget.value)}
-                disabled={saving()}
-              />
-            </div>
-            <div class="form-group">
-              <label for="transaction-notes">Note</label>
-              <input
-                id="transaction-notes"
-                value={notes()}
-                onInput={(event) => setNotes(event.currentTarget.value)}
-                disabled={saving()}
-              />
-            </div>
-          </div>
-        </details>
+            <input
+              type="date"
+              aria-label="Date"
+              required
+              value={date()}
+              onInput={(event) => {
+                if (event.currentTarget.value) setDate(event.currentTarget.value);
+              }}
+              onClick={(event) => {
+                // Open the calendar on any click, not only on the browser's own icon.
+                try {
+                  event.currentTarget.showPicker();
+                } catch {
+                  /* Older browsers fall back to their native behavior. */
+                }
+              }}
+              disabled={saving()}
+            />
+          </label>
+        </div>
         <Show when={error()}>
           <p class="form-error" role="alert">
             {error()}
