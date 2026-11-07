@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vite-plus/test";
 import {
+  calendarEntries,
   calendarWeeks,
   elapsedDays,
   spendingLevel,
@@ -50,5 +51,48 @@ describe("report calendar", () => {
     expect(elapsedDays("2026-10", "2026-11-07")).toBe(31);
     expect(elapsedDays("2026-11", "2026-11-07")).toBe(7);
     expect(elapsedDays("2026-12", "2026-11-07")).toBe(0);
+  });
+});
+
+describe("calendarEntries", () => {
+  const row = (
+    id: string,
+    fields: Partial<Parameters<typeof calendarEntries>[0][number]> = {},
+  ) => ({
+    id,
+    date: "2026-10-03",
+    amount: -100,
+    payee: null,
+    categoryName: null,
+    isChild: false,
+    parentId: null,
+    startingBalanceFlag: false,
+    ...fields,
+  });
+  test("lists scheduled payments first, then the day's biggest transactions", () => {
+    const days = calendarEntries(
+      [
+        row("small", { payee: "Coffee", amount: -50 }),
+        row("big", { categoryName: "Rent", amount: -9000 }),
+        row("pay", { payee: "Salary", amount: 20000 }),
+        row("split-child", { amount: -40, isChild: true, parentId: "big" }),
+        row("opening", { amount: 5000, startingBalanceFlag: true }),
+      ],
+      new Map([
+        [
+          "2026-10-03",
+          [{ date: "2026-09-30", payment: { id: "sch", name: "Gym", amount: -3500 } }],
+        ],
+      ]),
+      "2026-10-12",
+    );
+    expect(
+      days.get("2026-10-03")?.map((entry) => [entry.label, entry.kind, entry.overdue]),
+    ).toEqual([
+      ["Gym", "scheduled", true],
+      ["Salary", "transaction", undefined],
+      ["Rent", "transaction", undefined],
+      ["Coffee", "transaction", undefined],
+    ]);
   });
 });

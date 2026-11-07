@@ -3,7 +3,12 @@ import { api } from "../lib/api";
 import { useCurrency } from "../lib/currency";
 import { useDateFormat } from "../lib/date-format";
 import { usePrivacyMode } from "../lib/privacy";
-import { canRecordPayment, runPaymentAction, type PaymentAction } from "../lib/recurring-actions";
+import {
+  canRecordPayment,
+  defaultRecordDate,
+  runPaymentAction,
+  type PaymentAction,
+} from "../lib/recurring-actions";
 import {
   orderedPayments,
   paymentDate,
@@ -319,12 +324,13 @@ function PaymentDetail(props: {
   const account = () => props.accounts.find((row) => row.id === props.payment.accountId);
   const category = () => props.categories.find((row) => row.id === props.payment.categoryId);
   const ready = () => canRecordPayment(props.payment, props.accounts);
+  const [paidOn, setPaidOn] = createSignal(defaultRecordDate(props.payment));
   async function act(kind: PaymentAction) {
     if (busy()) return;
     setBusy(true);
     setError(null);
     try {
-      await runPaymentAction(props.payment, kind);
+      await runPaymentAction(props.payment, kind, kind === "record" ? { date: paidOn() } : {});
       props.onClose();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not update payment");
@@ -412,6 +418,41 @@ function PaymentDetail(props: {
             </button>
           }
         >
+          <Show when={ready()}>
+            <div class="payment-paid-on">
+              <span>Paid on</span>
+              <input
+                type="date"
+                aria-label="Paid on"
+                required
+                value={paidOn()}
+                disabled={busy()}
+                onInput={(event) => {
+                  if (event.currentTarget.value) setPaidOn(event.currentTarget.value);
+                }}
+              />
+              <Show when={paidOn() !== formatCalendarDate(new Date())}>
+                <button
+                  type="button"
+                  class="text-button"
+                  disabled={busy()}
+                  onClick={() => setPaidOn(formatCalendarDate(new Date()))}
+                >
+                  Today
+                </button>
+              </Show>
+              <Show when={paymentDate(props.payment) && paidOn() !== paymentDate(props.payment)}>
+                <button
+                  type="button"
+                  class="text-button"
+                  disabled={busy()}
+                  onClick={() => setPaidOn(paymentDate(props.payment)!)}
+                >
+                  Due date
+                </button>
+              </Show>
+            </div>
+          </Show>
           <div class="payment-detail-actions">
             <button class="btn btn-secondary" disabled={busy()} onClick={() => void act("skip")}>
               Skip

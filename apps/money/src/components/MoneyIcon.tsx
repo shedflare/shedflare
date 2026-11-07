@@ -16,7 +16,8 @@ export type MoneyIconName =
   | "check"
   | "chevron"
   | "copy"
-  | "chart";
+  | "chart"
+  | "filter";
 
 export default function MoneyIcon(props: { name: MoneyIconName; size?: number }) {
   return (
@@ -85,6 +86,9 @@ export default function MoneyIcon(props: { name: MoneyIconName; size?: number })
         <Match when={props.name === "copy"}>
           <rect x="8" y="8" width="12" height="13" rx="2" />
           <path d="M15 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" />
+        </Match>
+        <Match when={props.name === "filter"}>
+          <path d="M4 6h16M7 12h10M10 18h4" />
         </Match>
         <Match when={props.name === "chart"}>
           <path d="M4 20V4m0 16h16M8 15l4-5 4 3 4-7" />

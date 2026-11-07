@@ -107,7 +107,10 @@ filters `q`, `view`, `category`, `account`, `focus`; `month=all` for all time). 
 reuses `SpendingCalendar.tsx` with day totals from the filtered activity (`dailyActivityTotals`). Both calendars
 mark days with scheduled payments (`scheduledByDay`) and list them in the day detail
 (`ScheduledDay.tsx`); the next occurrence records in one click, dated on its day or today if early. In the
-current month, payments still overdue from earlier months are listed on today. Its rail lists accounts,
+current month, payments still overdue from earlier months are listed on today. Cells list the day's
+first few entries (`calendarEntries` in `src/lib/report-calendar.ts`) and hovering shows them all.
+Every Record action defaults to the due date when overdue (`defaultRecordDate`); the recurring
+drawer adds an editable "Paid on" date. Its rail lists accounts,
 upcoming payments with one-click Record, and category spending; selecting an account or category
 filters the activity in place. `/plan` (`src/routes/plan.tsx`) combines budget, recurring, and trend
 context for one month: an editable grid of assigned, spent, available, remaining scheduled spending
@@ -145,8 +148,8 @@ whose colors match the category list, previous-month percentage comparisons, and
 from `GET /api/reports/budget-analysis?month=YYYY-MM` (defaults to the current month). Category
 links open that month's Activity. Calendar (`ReportCalendar.tsx`, `?view=calendar&day=`), Net
 worth, Cash flow (with age of money), and Custom reports (`CustomReports.tsx`) are sibling views
-selected by `?view=`. Calendar (`SpendingCalendar.tsx` grid) shades each day from the monthly report's `days` totals and lists a
-selected day's transactions from `/api/transactions` date conditions.
+selected by `?view=`. Calendar (`SpendingCalendar.tsx` grid) shades each day from the monthly report's `days` totals; one
+`/api/transactions` read with the month's date conditions feeds cell entries, hover previews, and the selected day's list.
 `GET /api/reports/monthly/:month` validates YYYY-MM and uses `src/server/monthly-report.ts` to
 read the two months from D1. `src/domain/monthly-report.ts` owns the shared response schema and
 aggregation, including per-day totals: refunds net against category expenses, valid split children replace their parent,
@@ -231,7 +234,10 @@ matching split children remain visible. The same rows draw its daily available-b
 projects the category's scheduled payments (overdue ones today) as a dashed line to month end.
 The Add transaction modal reads `/api/payees/history` once on open (one grouped scan of
 transactions) and matches payees and their usual category in memory while typing. Invalid inline or saved filter conditions return 400
-instead of falling back to an unfiltered ledger.
+instead of falling back to an unfiltered ledger. `TransactionFilters.tsx` builds those conditions
+Linear-style: a searchable field menu applies values immediately (several categories/accounts become
+`oneOf`), and each chip's operator and value are editable in place. Pure helpers, including signed
+"Spent at least/at most" amount presets, live in `src/lib/filter-conditions.ts`.
 
 `/accounts/:id` opens the same activity feed with its live balance, account switcher, Add, and
 `AccountTransferDialog.tsx`. Ledger, CSV import, reconciliation, rename, and close/reopen live in

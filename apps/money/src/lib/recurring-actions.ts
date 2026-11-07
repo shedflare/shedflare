@@ -1,11 +1,14 @@
 import { dispatch } from "./pending-ops";
 import { emitMoneyDataChanged } from "./data-events";
 import { formatCalendarDate } from "../domain/types";
-import type { RecurringPayment } from "./recurring-view";
+import { paymentDate, recordDate, type RecurringPayment } from "./recurring-view";
 
 export type PaymentAction = "record" | "skip" | "pause" | "archive";
 
-/** Runs a payment action with its undo inverse and refreshes every open view on success. */
+/**
+ * Runs a payment action with its undo inverse and refreshes every open view on success.
+ * Recording defaults to the listed due date when it has passed, otherwise today.
+ */
 export async function runPaymentAction(
   original: RecurringPayment,
   kind: PaymentAction,
@@ -14,7 +17,7 @@ export async function runPaymentAction(
   if (kind === "record") {
     await dispatch(
       "post_schedule_transaction",
-      { scheduleId: original.id, date: options.date ?? formatCalendarDate(new Date()) },
+      { scheduleId: original.id, date: options.date ?? defaultRecordDate(original) },
       {
         undoInfo: {
           label: "Payment recorded",
@@ -85,6 +88,11 @@ export async function runPaymentAction(
     ).promise;
   }
   emitMoneyDataChanged();
+}
+
+export function defaultRecordDate(payment: RecurringPayment): string {
+  const today = formatCalendarDate(new Date());
+  return recordDate(paymentDate(payment) ?? today, today);
 }
 
 /** Recording needs an open account and a fixed amount; otherwise the details must be completed. */

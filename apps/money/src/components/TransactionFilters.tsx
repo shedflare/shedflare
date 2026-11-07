@@ -1,281 +1,57 @@
-import { createSignal, createEffect, For, Show, onCleanup } from "solid-js";
+import { createMemo, createResource, createSignal, For, onCleanup, Show } from "solid-js";
 import { dispatch } from "../lib/pending-ops";
 import { api } from "../lib/api";
-import type { JSX } from "solid-js";
-import * as Schema from "effect/Schema";
-import type {
-  AccountsResponse,
-  CategoriesResponse,
-  FiltersResponse,
-} from "../domain/schemas-client";
+import { useCurrency } from "../lib/currency";
+import { useDateFormat } from "../lib/date-format";
+import { formatCalendarDate } from "../domain/types";
+import { listenForMoneyDataChanged } from "../lib/data-events";
+import MoneyIcon from "./MoneyIcon";
+import {
+  amountPresets,
+  type Condition,
+  type CondOp,
+  conditionParts,
+  FIELD_LABELS,
+  FIELD_NAMES,
+  type FieldName,
+  flipCondition,
+  isListField,
+  type ListField,
+  listConditionIndex,
+  parseSavedConditions,
+  putCondition,
+  selectedIds,
+  toggleListValue,
+} from "../lib/filter-conditions";
+import type { FiltersResponse } from "../domain/schemas-client";
 
-type CondOp =
-  | "is"
-  | "isNot"
-  | "contains"
-  | "doesNotContain"
-  | "gt"
-  | "gte"
-  | "lt"
-  | "lte"
-  | "isbetween"
-  | "oneOf";
-
-const FIELD_NAMES = [
-  "account",
-  "payee",
-  "category",
-  "amount",
-  "date",
-  "notes",
-  "cleared",
-  "reconciled",
-] as const;
-type FieldName = (typeof FIELD_NAMES)[number];
-const FieldNameSchema = Schema.Literals(FIELD_NAMES);
-const CondOpSchema = Schema.Literals([
-  "is",
-  "isNot",
-  "contains",
-  "doesNotContain",
-  "gt",
-  "gte",
-  "lt",
-  "lte",
-  "isbetween",
-  "oneOf",
-]);
-const ConditionValueSchema = Schema.Union([
-  Schema.String,
-  Schema.Number,
-  Schema.Boolean,
-  Schema.Null,
-  Schema.Array(Schema.String),
-]);
-const ConditionSchema = Schema.Struct({
-  field: FieldNameSchema,
-  op: CondOpSchema,
-  value: ConditionValueSchema,
-  value2: Schema.optional(ConditionValueSchema),
-});
-
-export interface Condition {
-  field: FieldName;
-  op: CondOp;
-  value: string | number | boolean | null | string[];
-  value2?: string | number | boolean | null | string[];
-}
+export type { Condition, CondOp };
 
 type SavedFilter = Pick<FiltersResponse["filters"][number], "id" | "name" | "conditions"> & {
   conditionsOp: "and" | "or";
 };
 
-type Account = Pick<AccountsResponse["accounts"][number], "id" | "name">;
-
-type Category = Pick<CategoriesResponse["categories"][number], "id" | "name"> & {
-  groupName?: string | null;
-};
-
-type FieldConfig = {
+/** One row of the picker menu. `keepOpen` rows toggle list values in place. */
+type MenuOption = {
+  key: string;
   label: string;
-  ops: CondOp[];
-  render: (
-    value: Condition["value"],
-    onChange: (value: Condition["value"]) => void,
-    value2?: Condition["value2"],
-    onChange2?: (value: Condition["value2"]) => void,
-  ) => JSX.Element;
+  hint?: string;
+  selected?: boolean;
+  submenu?: boolean;
+  keepOpen?: boolean;
+  run: () => void;
 };
 
-const FIELD_CONFIGS = {
-  account: {
-    label: "Account",
-    ops: ["is", "isNot"],
-    render: (value, onChange) => {
-      const [accounts, setAccounts] = createSignal<Account[]>([]);
-      createEffect(() => {
-        void api
-          .accounts()
-          .then((data) => setAccounts(data.accounts.map(({ id, name }) => ({ id, name }))))
-          .catch(() => {
-            console.warn("[TransactionFilters] failed to load accounts");
-          });
-      });
-      return (
-        <select value={String(value ?? "")} onChange={(e) => onChange(e.currentTarget.value)}>
-          <option value="">Select account</option>
-          <For each={accounts()}>{(a) => <option value={a.id}>{a.name}</option>}</For>
-        </select>
-      );
-    },
-  },
-  payee: {
-    label: "Payee",
-    ops: ["contains", "doesNotContain", "is", "isNot"],
-    render: (value, onChange) => (
-      <input
-        type="text"
-        class="filter-input"
-        placeholder="Search payees..."
-        value={String(value ?? "")}
-        onInput={(event) => onChange(event.currentTarget.value)}
-      />
-    ),
-  },
-  category: {
-    label: "Category",
-    ops: ["is", "isNot"],
-    render: (value, onChange) => {
-      const [cats, setCats] = createSignal<Category[]>([]);
-      createEffect(() => {
-        void api
-          .categories()
-          .then((data) =>
-            setCats(
-              data.categories.map((category) => ({
-                id: category.id,
-                name: category.name,
-                groupName: category.group_name ?? null,
-              })),
-            ),
-          )
-          .catch(() => {
-            console.warn("[TransactionFilters] failed to load categories");
-          });
-      });
-      return (
-        <select value={String(value ?? "")} onChange={(e) => onChange(e.currentTarget.value)}>
-          <option value="">Select category</option>
-          <For each={cats()}>
-            {(c) => (
-              <option value={c.id}>
-                {c.groupName ? `${c.groupName}: ` : ""}
-                {c.name}
-              </option>
-            )}
-          </For>
-        </select>
-      );
-    },
-  },
-  amount: {
-    label: "Amount",
-    ops: ["is", "isNot", "gt", "gte", "lt", "lte", "isbetween"],
-    render: (value, onChange, value2, onChange2) => (
-      <div style={{ display: "flex", "align-items": "center", gap: "4px" }}>
-        <input
-          type="number"
-          class="filter-input filter-input-num"
-          placeholder="0"
-          value={String(value ?? "")}
-          onInput={(e) => onChange(Number(e.currentTarget.value) * 100)}
-        />
-        <Show when={value2 !== undefined}>
-          <span style={{ color: "var(--text-muted)" }}>to</span>
-          <input
-            type="number"
-            class="filter-input filter-input-num"
-            placeholder="0"
-            value={String(value2 ?? "")}
-            onInput={(e) => onChange2?.(Number(e.currentTarget.value) * 100)}
-          />
-        </Show>
-      </div>
-    ),
-  },
-  date: {
-    label: "Date",
-    ops: ["is", "isNot", "gt", "gte", "lt", "lte", "isbetween"],
-    render: (value, onChange, value2, onChange2) => (
-      <div style={{ display: "flex", "align-items": "center", gap: "4px" }}>
-        <input
-          type="date"
-          class="filter-input"
-          value={String(value ?? "")}
-          onInput={(e) => onChange(e.currentTarget.value)}
-        />
-        <Show when={value2 !== undefined}>
-          <span style={{ color: "var(--text-muted)" }}>to</span>
-          <input
-            type="date"
-            class="filter-input"
-            value={String(value2 ?? "")}
-            onInput={(e) => onChange2?.(e.currentTarget.value)}
-          />
-        </Show>
-      </div>
-    ),
-  },
-  notes: {
-    label: "Notes",
-    ops: ["contains", "doesNotContain"],
-    render: (value, onChange) => (
-      <input
-        type="text"
-        class="filter-input"
-        placeholder="Search notes..."
-        value={String(value ?? "")}
-        onInput={(e) => onChange(e.currentTarget.value)}
-      />
-    ),
-  },
-  cleared: {
-    label: "Cleared",
-    ops: ["is"],
-    render: (value, onChange) => (
-      <label style={{ display: "flex", "align-items": "center", gap: "6px", cursor: "pointer" }}>
-        <input
-          type="checkbox"
-          checked={Boolean(value)}
-          onChange={(e) => onChange(e.currentTarget.checked)}
-        />
-        Cleared
-      </label>
-    ),
-  },
-  reconciled: {
-    label: "Reconciled",
-    ops: ["is"],
-    render: (value, onChange) => (
-      <label style={{ display: "flex", "align-items": "center", gap: "6px", cursor: "pointer" }}>
-        <input
-          type="checkbox"
-          checked={Boolean(value)}
-          onChange={(e) => onChange(e.currentTarget.checked)}
-        />
-        Reconciled
-      </label>
-    ),
-  },
-} satisfies Record<FieldName, FieldConfig>;
-
-const OP_LABELS = {
-  is: "is",
-  isNot: "is not",
-  contains: "contains",
-  doesNotContain: "does not contain",
-  gt: ">",
-  gte: ">=",
-  lt: "<",
-  lte: "<=",
-  isbetween: "between",
-  oneOf: "is any of",
-} satisfies Record<CondOp, string>;
-
-function fieldLabel(field: FieldName): string {
-  return FIELD_CONFIGS[field].label;
+function daysAgo(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return formatCalendarDate(date);
 }
 
-function conditionLabel(cond: Condition): string {
-  const f = fieldLabel(cond.field);
-  const op = OP_LABELS[cond.op] ?? cond.op;
-  const v = String(cond.value ?? "");
-  if (cond.op === "isbetween") {
-    return `${f} ${op} ${v} and ${String(cond.value2 ?? "")}`;
-  }
-  return `${f} ${op} ${v}`;
-}
-
+/**
+ * Linear-style filters: one button opens a searchable field menu, picking a value applies it at
+ * once, and each chip's operator and value can be changed in place.
+ */
 export default function TransactionFilters(props: {
   accountId?: string;
   activeConditions: Condition[];
@@ -286,89 +62,238 @@ export default function TransactionFilters(props: {
     filterId: string | null,
   ) => void;
 }) {
+  const fmt = useCurrency();
+  const df = useDateFormat();
   const conditionsOp = () => props.activeConditionsOp ?? "and";
+  const [lists, { refetch }] = createResource(async () => {
+    const [accounts, categories, filters] = await Promise.all([
+      api.accounts(),
+      api.categories(),
+      api.filters(),
+    ]);
+    return {
+      accounts: accounts.accounts.map(({ id, name }) => ({ id, name, group: null })),
+      categories: categories.categories.map((row) => ({
+        id: row.id,
+        name: row.name,
+        group: row.group_name ?? null,
+      })),
+      filters: filters.filters.map(
+        (filter): SavedFilter => ({
+          id: filter.id,
+          name: filter.name,
+          conditions: filter.conditions,
+          conditionsOp: filter.conditionsOp === "or" ? "or" : "and",
+        }),
+      ),
+    };
+  });
+  onCleanup(listenForMoneyDataChanged(() => void refetch()));
+  const listRows = (field: ListField) =>
+    (field === "category" ? lists()?.categories : lists()?.accounts) ?? [];
+  const nameOf = (field: ListField, id: string) =>
+    listRows(field).find((row) => row.id === id)?.name;
 
-  const [savedFilters, setSavedFilters] = createSignal<SavedFilter[]>([]);
-  const [showAddMenu, setShowAddMenu] = createSignal(false);
-  const [showSavedMenu, setShowSavedMenu] = createSignal(false);
-
-  const [editField, setEditField] = createSignal<FieldName | null>(null);
-  const [editOp, setEditOp] = createSignal<CondOp>("is");
-  const [editValue, setEditValue] = createSignal<Condition["value"]>("");
-  const [editValue2, setEditValue2] = createSignal<Condition["value2"]>(undefined);
-  const [showBuilder, setShowBuilder] = createSignal(false);
-  const activeFieldConfig = () => {
-    const field = editField();
-    return field ? FIELD_CONFIGS[field] : undefined;
-  };
-  const activeOps = (): ReadonlyArray<CondOp> => activeFieldConfig()?.ops ?? ["is"];
-
+  const [open, setOpen] = createSignal(false);
+  const [step, setStep] = createSignal<FieldName | null>(null);
+  /** The chip being edited from its value segment; null adds a new condition. */
+  const [editing, setEditing] = createSignal<number | null>(null);
+  const [query, setQuery] = createSignal("");
+  const [dateValue, setDateValue] = createSignal("");
+  const [active, setActive] = createSignal(0);
+  const [savedOpen, setSavedOpen] = createSignal(false);
   const [saveName, setSaveName] = createSignal("");
-  const [showSave, setShowSave] = createSignal(false);
+  let root: HTMLDivElement | undefined;
+  let search: HTMLInputElement | undefined;
 
-  createEffect(() => {
-    void api
-      .filters()
-      .then((data) =>
-        setSavedFilters(
-          data.filters.map((filter) => ({
-            id: filter.id,
-            name: filter.name,
-            conditions: filter.conditions,
-            conditionsOp: filter.conditionsOp === "or" ? "or" : "and",
-          })),
-        ),
-      )
-      .catch(() => {
-        console.warn("[TransactionFilters] failed to load saved filters");
-      });
+  const outside = (event: PointerEvent) => {
+    if (root && event.target instanceof Node && !root.contains(event.target)) close();
+  };
+  document.addEventListener("pointerdown", outside);
+  onCleanup(() => document.removeEventListener("pointerdown", outside));
+
+  function change(conditions: Condition[], op: "and" | "or" = conditionsOp()) {
+    props.onConditionsChange(conditions, op, null);
+  }
+
+  function openMenu(field: FieldName | null = null, index: number | null = null) {
+    setSavedOpen(false);
+    setStep(field);
+    setEditing(index);
+    setQuery("");
+    setDateValue("");
+    setActive(0);
+    setOpen(true);
+    queueMicrotask(() => search?.focus());
+  }
+
+  function close() {
+    setOpen(false);
+    setSavedOpen(false);
+    setStep(null);
+    setEditing(null);
+  }
+
+  function apply(condition: Condition) {
+    change(putCondition(props.activeConditions, condition, editing()));
+    close();
+  }
+
+  function pickField(field: FieldName) {
+    setStep(field);
+    setQuery("");
+    setActive(0);
+    search?.focus();
+  }
+
+  function listOptions(field: ListField, text: string, prefix = ""): MenuOption[] {
+    const chosen = selectedIds(
+      props.activeConditions[listConditionIndex(props.activeConditions, field)],
+    );
+    return listRows(field)
+      .filter((row) => !text || `${row.group ?? ""} ${row.name}`.toLowerCase().includes(text))
+      .map((row) => ({
+        key: `${field}:${row.id}`,
+        label: `${prefix}${row.name}`,
+        hint: row.group ?? undefined,
+        selected: chosen.includes(row.id),
+        keepOpen: true,
+        run: () => change(toggleListValue(props.activeConditions, field, row.id)),
+      }));
+  }
+
+  const options = createMemo((): MenuOption[] => {
+    const text = query().trim().toLowerCase();
+    const raw = query().trim();
+    const field = step();
+    if (field === null) {
+      const fields = FIELD_NAMES.filter(
+        (name) =>
+          !(name === "account" && props.accountId) &&
+          (!text || FIELD_LABELS[name].toLowerCase().includes(text)),
+      ).map((name) => ({
+        key: name,
+        label: FIELD_LABELS[name],
+        submenu: true,
+        run: () => pickField(name),
+      }));
+      if (!text) return fields;
+      // Typing at the top level also reaches values directly, like Linear.
+      return [
+        ...fields,
+        ...listOptions("category", text, "Category › ").slice(0, 6),
+        ...(props.accountId ? [] : listOptions("account", text, "Account › ").slice(0, 4)),
+        {
+          key: "payee-contains",
+          label: `Payee contains “${raw}”`,
+          run: () => apply({ field: "payee", op: "contains", value: raw }),
+        },
+        {
+          key: "notes-contains",
+          label: `Notes contain “${raw}”`,
+          run: () => apply({ field: "notes", op: "contains", value: raw }),
+        },
+      ];
+    }
+    if (isListField(field)) return listOptions(field, text);
+    if (field === "payee" || field === "notes") {
+      if (!raw) return [];
+      return [
+        {
+          key: "contains",
+          label: `Contains “${raw}”`,
+          run: () => apply({ field, op: "contains", value: raw }),
+        },
+        { key: "is", label: `Is “${raw}”`, run: () => apply({ field, op: "is", value: raw }) },
+        {
+          key: "not",
+          label: `Does not contain “${raw}”`,
+          run: () => apply({ field, op: "doesNotContain", value: raw }),
+        },
+      ];
+    }
+    if (field === "amount") {
+      const cents = fmt().parseInput(raw);
+      if (!raw || !Number.isFinite(cents) || cents === 0) return [];
+      return amountPresets(cents).map((preset) => ({
+        key: preset.label,
+        label: `${preset.label} ${fmt().formatCents(Math.abs(cents))}`,
+        run: () => apply(preset.condition),
+      }));
+    }
+    if (field === "date") {
+      const date = dateValue();
+      if (date) {
+        return [
+          { key: "gte", label: `On or after ${df().formatDate(date)}`, op: "gte" as const },
+          { key: "lte", label: `On or before ${df().formatDate(date)}`, op: "lte" as const },
+          { key: "is", label: `On ${df().formatDate(date)}`, op: "is" as const },
+        ].map(({ op, ...option }) => ({
+          ...option,
+          run: () => apply({ field, op, value: date }),
+        }));
+      }
+      return [
+        { key: "7", label: "Last 7 days", days: 6 },
+        { key: "30", label: "Last 30 days", days: 29 },
+      ].map(({ days, ...option }) => ({
+        ...option,
+        run: () => apply({ field, op: "gte", value: daysAgo(days) }),
+      }));
+    }
+    return [
+      { key: "yes", label: "Yes", run: () => apply({ field, op: "is", value: true }) },
+      { key: "no", label: "No", run: () => apply({ field, op: "is", value: false }) },
+    ];
   });
 
-  function addCondition() {
-    const field = editField();
-    if (!field) return;
-    const newCond: Condition = {
-      field,
-      op: editOp(),
-      value: editValue(),
-      value2: editOp() === "isbetween" ? editValue2() : undefined,
-    };
-    const updated = [...props.activeConditions, newCond];
-    props.onConditionsChange(updated, conditionsOp(), null);
-    setShowBuilder(false);
-    setEditField(null);
-    setEditOp("is");
-    setEditValue("");
-    setEditValue2(undefined);
+  function choose(option: MenuOption | undefined) {
+    if (!option) return;
+    option.run();
+    if (option.keepOpen) search?.focus();
   }
 
-  function removeCondition(idx: number) {
-    const updated = props.activeConditions.filter((_, i) => i !== idx);
-    props.onConditionsChange(updated, conditionsOp(), null);
-  }
-
-  function clearAll() {
-    props.onConditionsChange([], "and", null);
-  }
-
-  function loadFilter(filter: SavedFilter) {
-    let conditions: Condition[];
-    try {
-      const decoded = Schema.decodeUnknownSync(Schema.Array(ConditionSchema))(
-        JSON.parse(filter.conditions),
-      );
-      conditions = decoded.map((condition) => ({
-        ...condition,
-        value: condition.value instanceof Array ? [...condition.value] : condition.value,
-        value2: condition.value2 instanceof Array ? [...condition.value2] : condition.value2,
-      }));
-    } catch {
-      console.warn("[TransactionFilters] failed to parse saved filter conditions");
-      conditions = [];
+  function onKeyDown(event: KeyboardEvent) {
+    const count = options().length;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActive((index) => (count ? (index + 1) % count : 0));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActive((index) => (count ? (index - 1 + count) % count : 0));
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      choose(options()[Math.min(active(), count - 1)]);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      if (step() !== null && editing() === null) setStep(null);
+      else close();
+    } else if (event.key === "Backspace" && !query() && step() !== null && editing() === null) {
+      event.preventDefault();
+      setStep(null);
+      setActive(0);
     }
-    props.onConditionsChange(conditions, filter.conditionsOp, filter.id);
-    setShowSavedMenu(false);
   }
+
+  const placeholder = () => {
+    const field = step();
+    if (field === null) return "Add filter…";
+    if (field === "amount") return "Type an amount";
+    if (field === "payee" || field === "notes") return `${FIELD_LABELS[field]} text…`;
+    if (field === "date" || field === "cleared" || field === "reconciled")
+      return FIELD_LABELS[field];
+    return `Find ${FIELD_LABELS[field].toLowerCase()}…`;
+  };
+
+  const parts = (condition: Condition) =>
+    conditionParts(condition, {
+      name: nameOf,
+      cents: (cents) => fmt().formatCents(cents),
+      date: (date) => df().formatDate(date),
+    });
+
+  const matchedFilter = () =>
+    lists()?.filters.find((f) => JSON.stringify(props.activeConditions) === f.conditions) ?? null;
 
   function saveAsNew() {
     const name = saveName().trim();
@@ -381,219 +306,249 @@ export default function TransactionFilters(props: {
       },
     });
     setSaveName("");
-    setShowSave(false);
+    setSavedOpen(false);
   }
-
-  function deleteFilter(id: string) {
-    dispatch("delete_filter", { id });
-    props.onConditionsChange([], "and", null);
-  }
-
-  function toggleConditionsOp() {
-    const next = conditionsOp() === "and" ? "or" : "and";
-    props.onConditionsChange(props.activeConditions, next, null);
-  }
-
-  createEffect(() => {
-    if (showAddMenu() || showSavedMenu() || showBuilder()) {
-      const handler = () => {
-        setShowAddMenu(false);
-        setShowSavedMenu(false);
-      };
-      document.addEventListener("click", handler);
-      onCleanup(() => document.removeEventListener("click", handler));
-    }
-  });
-
-  const matchedFilter = () =>
-    savedFilters().find((f) => JSON.stringify(props.activeConditions) === f.conditions) ?? null;
 
   return (
-    <div class="filter-bar">
-      <div class="filter-bar-header">
-        <div class="filter-bar-row">
-          <Show when={props.activeConditions.length > 1}>
-            <button class="btn btn-xs btn-ghost filter-op-toggle" onClick={toggleConditionsOp}>
-              {conditionsOp() === "and" ? "all" : "any"}
-            </button>
-          </Show>
-
-          <div class="filter-chips">
-            <For each={props.activeConditions}>
-              {(cond, idx) => (
-                <span class="filter-chip">
-                  <span class="filter-chip-label">{conditionLabel(cond)}</span>
-                  <button class="filter-chip-remove" onClick={() => removeCondition(idx())}>
-                    ✕
-                  </button>
-                </span>
-              )}
-            </For>
-          </div>
-
-          <div style={{ position: "relative" }}>
-            <button
-              class="btn btn-xs btn-ghost"
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowAddMenu(!showAddMenu());
-              }}
-            >
-              + Filter
-            </button>
-            <Show when={showAddMenu()}>
-              <div class="filter-dropdown" onClick={(e) => e.stopPropagation()}>
-                <For each={FIELD_NAMES}>
-                  {(key) => (
-                    <button
-                      class="filter-dropdown-item"
-                      onClick={() => {
-                        setShowAddMenu(false);
-                        setEditField(key);
-                        setEditOp(FIELD_CONFIGS[key].ops[0]);
-                        setEditValue("");
-                        setEditValue2(undefined);
-                        setShowBuilder(true);
-                      }}
-                    >
-                      {FIELD_CONFIGS[key].label}
-                    </button>
-                  )}
-                </For>
-              </div>
-            </Show>
-          </div>
-
-          <Show when={props.activeConditions.length > 0}>
-            <button class="btn btn-xs btn-ghost" onClick={clearAll}>
-              Clear
-            </button>
-          </Show>
-        </div>
-
-        <div style={{ display: "flex", gap: "6px", "align-items": "center" }}>
-          <Show when={props.activeConditions.length > 0}>
-            <div style={{ position: "relative" }}>
+    <div class="filter-bar" ref={(element) => (root = element)}>
+      <Show when={props.activeConditions.length > 1}>
+        <button
+          type="button"
+          class="filter-match"
+          title="Switch between matching all or any filter"
+          onClick={() => change(props.activeConditions, conditionsOp() === "and" ? "or" : "and")}
+        >
+          Match {conditionsOp() === "and" ? "all" : "any"}
+        </button>
+      </Show>
+      <For each={props.activeConditions}>
+        {(condition, index) => {
+          const label = () => parts(condition);
+          const flipped = () => flipCondition(condition);
+          return (
+            <span class="filter-chip">
               <button
-                class="btn btn-xs btn-ghost filter-save-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowSavedMenu(!showSavedMenu());
+                type="button"
+                class="filter-chip-field"
+                onClick={() => openMenu(condition.field, index())}
+              >
+                {label().field}
+              </button>
+              <button
+                type="button"
+                class="filter-chip-op"
+                disabled={!flipped()}
+                title={flipped() ? "Switch operator" : undefined}
+                onClick={() => {
+                  const next = flipped();
+                  if (next) change(putCondition(props.activeConditions, next, index()));
                 }}
               >
-                {matchedFilter()?.name ?? "Unsaved filter"} ▾
+                {label().op}
               </button>
-              <Show when={showSavedMenu()}>
-                <div
-                  class="filter-dropdown filter-dropdown-right"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Show when={savedFilters().length > 0}>
-                    <div class="filter-dropdown-label">Load saved filter</div>
-                    <For each={savedFilters()}>
-                      {(f) => (
-                        <div class="filter-dropdown-item-row">
-                          <button class="filter-dropdown-item" onClick={() => loadFilter(f)}>
-                            {f.name}
-                          </button>
-                          <button
-                            class="btn btn-icon btn-xs btn-ghost"
-                            style={{ color: "var(--text-muted)" }}
-                            onClick={() => deleteFilter(f.id)}
-                            title={`Delete "${f.name}"`}
-                          >
-                            🗑️
-                          </button>
-                        </div>
-                      )}
-                    </For>
-                    <div class="filter-dropdown-divider" />
-                  </Show>
+              <button
+                type="button"
+                class="filter-chip-value"
+                title="Change value"
+                onClick={() => openMenu(condition.field, index())}
+              >
+                {label().value}
+              </button>
+              <button
+                type="button"
+                class="filter-chip-remove"
+                aria-label={`Remove ${label().field} filter`}
+                onClick={() => change(props.activeConditions.filter((_, at) => at !== index()))}
+              >
+                <MoneyIcon name="close" size={12} />
+              </button>
+            </span>
+          );
+        }}
+      </For>
+      <div class="filter-anchor">
+        <button
+          type="button"
+          class="filter-add"
+          classList={{ "is-empty": props.activeConditions.length === 0 }}
+          aria-expanded={open()}
+          onClick={() => (open() ? close() : openMenu())}
+        >
+          <MoneyIcon name={props.activeConditions.length ? "plus" : "filter"} size={14} />
+          <Show when={props.activeConditions.length === 0}>Filter</Show>
+        </button>
+        <Show when={open()}>
+          <div class="filter-menu" role="dialog" aria-label="Add filter">
+            <div class="filter-menu-search">
+              <Show when={step()}>
+                {(field) => (
                   <button
-                    class="filter-dropdown-item"
-                    onClick={() => {
-                      setShowSavedMenu(false);
-                      setShowSave(true);
-                    }}
+                    type="button"
+                    class="filter-menu-back"
+                    aria-label="Back to fields"
+                    onClick={() => (editing() === null ? setStep(null) : close())}
                   >
-                    Save as new filter...
+                    {FIELD_LABELS[field()]}
                   </button>
+                )}
+              </Show>
+              <input
+                ref={(element) => (search = element)}
+                value={query()}
+                placeholder={placeholder()}
+                aria-label={placeholder()}
+                inputMode={step() === "amount" ? fmt().inputMode : undefined}
+                onInput={(event) => {
+                  setQuery(event.currentTarget.value);
+                  setActive(0);
+                }}
+                onKeyDown={onKeyDown}
+              />
+            </div>
+            <Show when={step() === "date"}>
+              <div class="filter-menu-date">
+                <input
+                  type="date"
+                  aria-label="Date"
+                  value={dateValue()}
+                  onInput={(event) => {
+                    setDateValue(event.currentTarget.value);
+                    setActive(0);
+                  }}
+                />
+              </div>
+            </Show>
+            <div class="filter-menu-list" role="listbox">
+              <For
+                each={options()}
+                fallback={
+                  <p class="filter-menu-empty">
+                    {step() === "amount"
+                      ? "Type an amount to compare"
+                      : step() === "payee" || step() === "notes"
+                        ? "Type the text to match"
+                        : lists.loading
+                          ? "Loading…"
+                          : "No matches"}
+                  </p>
+                }
+              >
+                {(option, index) => (
+                  <button
+                    type="button"
+                    role="option"
+                    class="filter-menu-item"
+                    classList={{ "is-active": index() === active() }}
+                    aria-selected={option.selected ?? index() === active()}
+                    onPointerMove={() => setActive(index())}
+                    onClick={() => choose(option)}
+                  >
+                    <Show when={option.selected !== undefined}>
+                      <span class="filter-menu-check" classList={{ "is-on": option.selected }}>
+                        <Show when={option.selected}>
+                          <MoneyIcon name="check" size={11} />
+                        </Show>
+                      </span>
+                    </Show>
+                    <span class="filter-menu-label">{option.label}</span>
+                    <Show when={option.hint}>
+                      <small>{option.hint}</small>
+                    </Show>
+                    <Show when={option.submenu}>
+                      <MoneyIcon name="chevron" size={13} />
+                    </Show>
+                  </button>
+                )}
+              </For>
+            </div>
+          </div>
+        </Show>
+      </div>
+      <Show when={props.activeConditions.length > 0}>
+        <button type="button" class="filter-clear" onClick={() => change([], "and")}>
+          Clear
+        </button>
+      </Show>
+      <Show when={props.activeConditions.length > 0 || lists()?.filters.length}>
+        <div class="filter-anchor filter-saved">
+          <button
+            type="button"
+            class="filter-clear"
+            aria-expanded={savedOpen()}
+            onClick={() => {
+              setOpen(false);
+              setSavedOpen(!savedOpen());
+            }}
+          >
+            {props.activeConditions.length ? (matchedFilter()?.name ?? "Save view") : "Saved views"}{" "}
+            ▾
+          </button>
+          <Show when={savedOpen()}>
+            <div class="filter-menu filter-menu-right" role="dialog" aria-label="Saved views">
+              <Show when={lists()?.filters.length}>
+                <div class="filter-menu-list">
+                  <For each={lists()?.filters}>
+                    {(saved) => (
+                      <div class="filter-menu-row">
+                        <button
+                          type="button"
+                          class="filter-menu-item"
+                          onClick={() => {
+                            props.onConditionsChange(
+                              parseSavedConditions(saved.conditions),
+                              saved.conditionsOp,
+                              saved.id,
+                            );
+                            close();
+                          }}
+                        >
+                          <span class="filter-menu-label">{saved.name}</span>
+                        </button>
+                        <button
+                          type="button"
+                          class="filter-menu-delete"
+                          aria-label={`Delete “${saved.name}”`}
+                          onClick={() => {
+                            dispatch("delete_filter", { id: saved.id });
+                            change([], "and");
+                          }}
+                        >
+                          <MoneyIcon name="close" size={12} />
+                        </button>
+                      </div>
+                    )}
+                  </For>
                 </div>
+              </Show>
+              <Show when={props.activeConditions.length > 0 && !matchedFilter()}>
+                <form
+                  class="filter-menu-search"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    saveAsNew();
+                  }}
+                >
+                  <input
+                    value={saveName()}
+                    placeholder="Name this view…"
+                    aria-label="View name"
+                    onInput={(event) => setSaveName(event.currentTarget.value)}
+                  />
+                  <button
+                    type="submit"
+                    class="btn btn-primary btn-xs"
+                    disabled={!saveName().trim()}
+                  >
+                    Save
+                  </button>
+                </form>
               </Show>
             </div>
           </Show>
-        </div>
-      </div>
-
-      <Show when={showBuilder()}>
-        <div class="filter-builder">
-          <div class="filter-builder-row">
-            <span class="filter-builder-label">Where</span>
-            <select
-              class="filter-input filter-input-select"
-              value={editField() ?? ""}
-              onChange={(e) => {
-                const field = Schema.decodeUnknownSync(FieldNameSchema)(e.currentTarget.value);
-                setEditField(field);
-                const ops = FIELD_CONFIGS[field].ops;
-                setEditOp(ops[0]);
-                setEditValue("");
-                setEditValue2(undefined);
-              }}
-            >
-              <For each={Object.entries(FIELD_CONFIGS)}>
-                {([key, cfg]) => <option value={key}>{cfg.label}</option>}
-              </For>
-            </select>
-
-            <select
-              class="filter-input filter-input-select"
-              value={editOp()}
-              onChange={(e) => {
-                setEditOp(Schema.decodeUnknownSync(CondOpSchema)(e.currentTarget.value));
-                if (e.currentTarget.value !== "isbetween") setEditValue2(undefined);
-              }}
-            >
-              <For each={activeOps()}>{(op) => <option value={op}>{OP_LABELS[op]}</option>}</For>
-            </select>
-
-            {activeFieldConfig()?.render(editValue(), setEditValue, editValue2(), setEditValue2)}
-
-            <div class="filter-builder-actions">
-              <button class="btn btn-primary btn-xs" onClick={addCondition}>
-                Add
-              </button>
-              <button class="btn btn-ghost btn-xs" onClick={() => setShowBuilder(false)}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      </Show>
-
-      <Show when={showSave()}>
-        <div class="filter-builder">
-          <div class="filter-builder-row">
-            <span class="filter-builder-label">Name</span>
-            <input
-              type="text"
-              class="filter-input"
-              placeholder="My saved filter"
-              value={saveName()}
-              onInput={(e) => setSaveName(e.currentTarget.value)}
-              autofocus
-            />
-            <button class="btn btn-primary btn-xs" onClick={saveAsNew}>
-              Save
-            </button>
-            <button class="btn btn-ghost btn-xs" onClick={() => setShowSave(false)}>
-              Cancel
-            </button>
-          </div>
         </div>
       </Show>
     </div>
   );
 }
 
-export type { SavedFilter, CondOp };
+export type { SavedFilter };

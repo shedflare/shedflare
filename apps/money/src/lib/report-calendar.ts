@@ -64,3 +64,69 @@ export function elapsedDays(month: string, today: string): number {
   if (today < start) return 0;
   return Number(today.slice(8, 10));
 }
+
+export type CalendarEntry = {
+  key: string;
+  label: string;
+  /** Signed cents: negative is money out. Null for a variable scheduled amount. */
+  amount: number | null;
+  kind: "transaction" | "scheduled";
+  overdue?: boolean;
+};
+
+type EntryTransaction = {
+  id: string;
+  date: string;
+  amount: number;
+  payee: string | null;
+  categoryName?: string | null;
+  isChild: boolean;
+  parentId: string | null;
+  startingBalanceFlag: boolean;
+};
+type EntryScheduled = {
+  date: string;
+  payment: { id: string; name: string | null; amount: number | null };
+};
+
+/**
+ * What happened (and is still due) on each day: scheduled payments first, then transactions by
+ * size. Split children are folded into their parent; opening balances are left out.
+ */
+export function calendarEntries(
+  transactions: readonly EntryTransaction[],
+  scheduled: ReadonlyMap<string, readonly EntryScheduled[]>,
+  today: string,
+): Map<string, CalendarEntry[]> {
+  const ids = new Set(transactions.map((row) => row.id));
+  const days = new Map<string, CalendarEntry[]>();
+  for (const [date, rows] of scheduled)
+    days.set(
+      date,
+      rows.map((row) => ({
+        key: `scheduled-${row.payment.id}-${row.date}`,
+        label: row.payment.name ?? "Scheduled payment",
+        amount: row.payment.amount,
+        kind: "scheduled",
+        overdue: row.date < today,
+      })),
+    );
+  const happened = new Map<string, CalendarEntry[]>();
+  for (const row of transactions) {
+    if (row.startingBalanceFlag || (row.isChild && row.parentId && ids.has(row.parentId))) continue;
+    const list = happened.get(row.date) ?? [];
+    list.push({
+      key: row.id,
+      label: row.payee || row.categoryName || "Transaction",
+      amount: row.amount,
+      kind: "transaction",
+    });
+    happened.set(row.date, list);
+  }
+  for (const [date, list] of happened)
+    days.set(date, [
+      ...(days.get(date) ?? []),
+      ...list.sort((a, b) => Math.abs(b.amount ?? 0) - Math.abs(a.amount ?? 0)),
+    ]);
+  return days;
+}

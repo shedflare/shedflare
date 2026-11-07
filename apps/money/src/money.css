@@ -2999,6 +2999,19 @@ svg {
 .payment-detail-meta .category-monogram {
   margin-left: auto;
 }
+.payment-paid-on {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.payment-paid-on input {
+  width: auto;
+  padding: 6px 10px;
+}
 .payment-detail-actions {
   display: grid;
   grid-template-columns: 1fr 2fr;
@@ -3320,72 +3333,6 @@ svg {
 .money-chart-legend,
 .report-spending-overview,
 .report-calendar,
-.report-calendar-date {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.report-calendar-due {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 1px 4px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  color: var(--accent);
-  font-size: 10px;
-  font-weight: 600;
-}
-.report-calendar-due.is-overdue {
-  background: color-mix(in srgb, var(--negative) 16%, transparent);
-  color: var(--negative);
-}
-.calendar-scheduled {
-  margin-bottom: 18px;
-}
-.calendar-scheduled h3 {
-  margin: 0 0 4px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-.calendar-scheduled-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border);
-}
-.calendar-scheduled-name {
-  display: grid;
-  flex: 1;
-  gap: 2px;
-  min-width: 0;
-  color: var(--text);
-  text-decoration: none;
-}
-.calendar-scheduled-name > strong {
-  overflow: hidden;
-  font-size: 13px;
-  font-weight: 550;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.calendar-scheduled-name > small {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-.calendar-scheduled-row.is-overdue .calendar-scheduled-name > small {
-  color: var(--negative);
-}
-.calendar-scheduled-amount {
-  font-size: 13px;
-  font-weight: 550;
-  font-variant-numeric: tabular-nums;
-}
-.calendar-scheduled-row .btn {
-  flex: none;
-}
 .report-calendar-legend {
   --chart-income: #2f6f9f;
   --chart-spending: #c4672f;
@@ -3495,12 +3442,13 @@ svg {
   letter-spacing: 0.4px;
 }
 .report-calendar-day {
+  position: relative;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 2px;
   min-width: 0;
-  min-height: 74px;
+  min-height: 96px;
   padding: 7px 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -3522,8 +3470,12 @@ svg {
   color: var(--accent);
   font-weight: 700;
 }
-.report-calendar-day.is-future {
+.report-calendar-day.is-future > :not(.report-calendar-popover) {
   opacity: 0.55;
+}
+.report-calendar-day:hover,
+.report-calendar-day:focus-visible {
+  z-index: 5;
 }
 .report-calendar-day.is-selected {
   border-color: var(--accent);
@@ -3562,6 +3514,154 @@ svg {
 .report-calendar-day.level-4,
 .report-calendar-swatch.level-4 {
   background: color-mix(in srgb, var(--chart-spending) 60%, var(--bg-card));
+}
+.report-calendar-date {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.report-calendar-due {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+}
+.report-calendar-due.is-overdue {
+  background: color-mix(in srgb, var(--negative) 16%, transparent);
+  color: var(--negative);
+}
+.calendar-scheduled {
+  margin-bottom: 18px;
+}
+.calendar-scheduled h3 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.calendar-scheduled-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.calendar-scheduled-name {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+  color: var(--text);
+  text-decoration: none;
+}
+.calendar-scheduled-name > strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.calendar-scheduled-name > small {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.calendar-scheduled-row.is-overdue .calendar-scheduled-name > small {
+  color: var(--negative);
+}
+.calendar-scheduled-amount {
+  font-size: 13px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+.calendar-scheduled-row .btn {
+  flex: none;
+}
+.report-calendar-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: auto;
+  padding-top: 4px;
+  min-width: 0;
+}
+.report-calendar-entry {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.report-calendar-entry > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.report-calendar-entry > span:last-child {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.report-calendar-entry.is-scheduled {
+  color: var(--accent);
+}
+.report-calendar-entry.is-overdue {
+  color: var(--negative);
+}
+.report-calendar-more {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.report-calendar-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  width: max(100%, 260px);
+  max-height: 320px;
+  overflow: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 28%);
+  color: var(--text);
+  cursor: default;
+}
+.report-calendar-popover.opens-left {
+  right: 0;
+  left: auto;
+}
+.report-calendar-popover.opens-up {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+.report-calendar-popover > strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.report-calendar-popover .report-calendar-entry {
+  font-size: 12px;
+}
+.report-calendar-popover .report-calendar-entry small {
+  font-size: 11px;
+  opacity: 0.8;
+}
+.report-calendar-popover-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+@media (hover: hover) {
+  .report-calendar-day:hover .report-calendar-popover {
+    display: flex;
+  }
 }
 .report-calendar-legend {
   display: flex;
@@ -3613,7 +3713,9 @@ svg {
   .report-calendar-income {
     font-size: 10px;
   }
-  .report-calendar-income {
+  .report-calendar-income,
+  .report-calendar-entries,
+  .report-calendar-popover {
     display: none;
   }
 }
@@ -5143,7 +5245,7 @@ a.ws-stat:hover {
 .activity-panel-count {
   font-size: 11px;
   color: var(--text-secondary);
-  margin-right: auto;
+  margin-left: auto;
 }
 .activity-panel .activity-advanced {
   margin: 0;
@@ -5355,5 +5457,238 @@ a.ws-stat:hover {
   }
   .rec-actions {
     opacity: 1;
+  }
+}
+
+/* Linear-style filters: chips with clickable segments and a searchable picker. */
+.filter-bar {
+  display: contents;
+}
+.filter-anchor {
+  position: relative;
+}
+.filter-chip {
+  display: inline-flex;
+  align-items: stretch;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-card);
+  font-size: 12px;
+  overflow: hidden;
+}
+.filter-chip > button {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  padding: 0 8px;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.filter-chip > button:last-child {
+  border-right: 0;
+}
+.filter-chip > button:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.filter-chip .filter-chip-op {
+  color: var(--text-secondary);
+}
+.filter-chip .filter-chip-op:disabled {
+  cursor: default;
+}
+.filter-chip .filter-chip-value {
+  font-weight: 600;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.filter-chip .filter-chip-remove {
+  color: var(--text-muted);
+  padding: 0 6px;
+}
+.filter-add,
+.filter-clear,
+.filter-match {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0 8px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.filter-add {
+  border-color: var(--border);
+}
+.filter-add:not(.is-empty) {
+  width: 26px;
+  justify-content: center;
+  padding: 0;
+}
+.filter-add:hover,
+.filter-clear:hover,
+.filter-match:hover,
+.filter-add[aria-expanded="true"] {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.filter-match {
+  border-color: var(--border);
+}
+.filter-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 60;
+  width: 280px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
+  overflow: hidden;
+}
+.filter-menu-right {
+  left: auto;
+  right: 0;
+}
+.filter-menu-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.filter-menu-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+.filter-menu-back {
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  padding: 2px 7px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.filter-menu-date {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.filter-menu-date input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text);
+  padding: 5px 8px;
+  font: inherit;
+}
+.filter-menu-list {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px;
+}
+.filter-menu-row {
+  display: flex;
+  align-items: center;
+}
+.filter-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  padding: 7px 8px;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.filter-menu-item.is-active {
+  background: var(--bg-hover);
+}
+.filter-menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.filter-menu-item small {
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.filter-menu-item > svg {
+  color: var(--text-muted);
+  transform: rotate(-90deg);
+}
+.filter-menu-check {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.filter-menu-check.is-on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+.filter-menu-delete {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 6px;
+  cursor: pointer;
+}
+.filter-menu-delete:hover {
+  color: var(--negative);
+}
+.filter-menu-empty {
+  margin: 0;
+  padding: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+@media (max-width: 600px) {
+  .filter-menu {
+    position: fixed;
+    top: auto;
+    bottom: calc(96px + env(safe-area-inset-bottom));
+    left: 12px;
+    right: 12px;
+    width: auto;
+  }
+  .filter-menu-list {
+    max-height: 45vh;
+  }
+  .filter-menu-search input {
+    font-size: 16px;
   }
 }

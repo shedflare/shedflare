@@ -9,9 +9,9 @@ import { loadRequest, requestError, requestValue } from "../lib/request-state";
 import { useCurrency } from "../lib/currency";
 import { usePrivacyMode } from "../lib/privacy";
 import { listenForMoneyDataChanged } from "../lib/data-events";
-import { formatCalendarDate } from "../domain/types";
+import { formatCalendarDate, monthBoundaries } from "../domain/types";
 import type { MonthlyReport } from "../domain/monthly-report";
-import { elapsedDays } from "../lib/report-calendar";
+import { calendarEntries, elapsedDays } from "../lib/report-calendar";
 
 /** Reports calendar: month spending metrics, the day grid, and a selected day's activity. */
 export default function ReportCalendar(props: {
@@ -32,27 +32,34 @@ export default function ReportCalendar(props: {
   const elapsed = createMemo(() => elapsedDays(props.report.month, today));
   const dayLabel = useCalendarDayLabel();
   const scheduled = useScheduledPayments(() => props.report.month);
-  const [dayResult, { refetch }] = createResource(
-    () => props.selectedDay ?? false,
-    (day) =>
+  // One read per month feeds the cell entries, hover previews, and the selected day's list.
+  const [monthResult, { refetch }] = createResource(
+    () => props.report.month,
+    (month) =>
       loadRequest(async () => {
+        const { start, end } = monthBoundaries(month);
         const [list, categories] = await Promise.all([
           api.transactions({
             conditions: [
-              { field: "date", op: "gte", value: day },
-              { field: "date", op: "lte", value: day },
+              { field: "date", op: "gte", value: start },
+              { field: "date", op: "lte", value: end },
             ],
           }),
           api.categories(),
         ]);
-        return { day, transactions: list.transactions, categories: categories.categories };
+        return { month, transactions: list.transactions, categories: categories.categories };
       }),
   );
   onMount(() => onCleanup(listenForMoneyDataChanged(() => void refetch())));
-  const dayData = () => {
-    const result = requestValue(dayResult());
-    return result?.day === props.selectedDay ? result : undefined;
+  const monthData = () => {
+    const result = requestValue(monthResult());
+    return result?.month === props.report.month ? result : undefined;
   };
+  const entries = createMemo(() =>
+    calendarEntries(monthData()?.transactions ?? [], scheduled.byDay(), today),
+  );
+  const dayRows = (date: string) =>
+    (monthData()?.transactions ?? []).filter((row) => row.date === date);
   return (
     <>
       <div class="report-metrics">
@@ -86,6 +93,7 @@ export default function ReportCalendar(props: {
         selectedDay={props.selectedDay}
         onSelectDay={props.onSelectDay}
         scheduledMark={scheduled.mark}
+        entries={(date) => entries().get(date) ?? []}
         detail={(day) => (
           <>
             <ScheduledDayList
@@ -93,12 +101,12 @@ export default function ReportCalendar(props: {
               accounts={scheduled.accounts()}
             />
             <PageState
-              loading={dayResult.loading && !dayData()}
-              error={requestError(dayResult())}
+              loading={monthResult.loading && !monthData()}
+              error={requestError(monthResult())}
               onRetry={() => void refetch()}
             >
               <Show
-                when={dayData()?.transactions.length}
+                when={dayRows(day.date).length}
                 fallback={
                   <Show when={!scheduled.byDay().get(day.date)?.length}>
                     <p class="quiet-empty">No transactions on this day</p>
@@ -106,8 +114,8 @@ export default function ReportCalendar(props: {
                 }
               >
                 <ActivityFeed
-                  transactions={dayData()?.transactions ?? []}
-                  categories={dayData()?.categories ?? []}
+                  transactions={dayRows(day.date)}
+                  categories={monthData()?.categories ?? []}
                   onSelect={(id) =>
                     navigate(`/?month=${props.report.month}&focus=${encodeURIComponent(id)}`)
                   }

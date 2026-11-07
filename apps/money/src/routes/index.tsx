@@ -525,7 +525,7 @@ export default function Overview() {
                                   <button
                                     type="button"
                                     class="btn btn-icon btn-ghost btn-sm"
-                                    title="Record payment now"
+                                    title="Record payment (dated on its due day when overdue)"
                                     aria-label={`Record ${payment.name ?? "payment"}`}
                                     disabled={!!paying()}
                                     onClick={() => void record(payment)}

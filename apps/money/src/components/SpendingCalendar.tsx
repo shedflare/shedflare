@@ -6,6 +6,7 @@ import MoneyIcon from "./MoneyIcon";
 import { formatCalendarDate, parseCalendarDate } from "../domain/types";
 import {
   type CalendarCell,
+  type CalendarEntry,
   type CalendarDayTotals,
   calendarWeeks,
   spendingLevel,
@@ -35,6 +36,8 @@ export default function SpendingCalendar(props: {
   onSelectDay: (date: string | undefined) => void;
   /** Scheduled payments shown on a date, as a marker. */
   scheduledMark?: (date: string) => { count: number; overdue: boolean } | undefined;
+  /** The day's scheduled payments and transactions: a few fill the cell, all show on hover. */
+  entries?: (date: string) => readonly CalendarEntry[];
   detail: (day: CalendarDay) => JSX.Element;
 }) {
   const fmt = useCurrency();
@@ -64,10 +67,16 @@ export default function SpendingCalendar(props: {
           </For>
         </div>
         <For each={weeks()}>
-          {(week) => (
+          {(week, row) => (
             <div class="report-calendar-row" role="row">
               <For each={week}>
-                {(cell) => {
+                {(cell, column) => {
+                  const entries = () =>
+                    cell.kind === "day" ? (props.entries?.(cell.date) ?? []) : [];
+                  const amount = (entry: CalendarEntry, format: (cents: number) => string) =>
+                    entry.amount === null
+                      ? "Variable"
+                      : `${entry.amount > 0 ? "+" : ""}${format(Math.abs(entry.amount))}`;
                   const mark = () =>
                     cell.kind === "day" ? props.scheduledMark?.(cell.date) : undefined;
                   const scheduled = () => mark()?.count ?? 0;
@@ -110,6 +119,57 @@ export default function SpendingCalendar(props: {
                       <Show when={cell.income > 0}>
                         <span class={`report-calendar-income ${privacy().blurClass()}`}>
                           +{compact()(cell.income)}
+                        </span>
+                      </Show>
+                      <Show when={entries().length}>
+                        <span class={`report-calendar-entries ${privacy().blurClass()}`}>
+                          <For each={entries().slice(0, 3)}>
+                            {(entry) => (
+                              <span
+                                class="report-calendar-entry"
+                                classList={{
+                                  "is-scheduled": entry.kind === "scheduled",
+                                  "is-overdue": entry.overdue,
+                                }}
+                              >
+                                <span>{entry.label}</span>
+                                <span>{amount(entry, compact())}</span>
+                              </span>
+                            )}
+                          </For>
+                          <Show when={entries().length > 3}>
+                            <span class="report-calendar-more">+{entries().length - 3} more</span>
+                          </Show>
+                        </span>
+                        <span
+                          class={`report-calendar-popover ${privacy().blurClass()}`}
+                          classList={{
+                            "opens-left": column() >= 4,
+                            "opens-up": row() >= weeks().length - 2,
+                          }}
+                          aria-hidden="true"
+                        >
+                          <strong>{dayLabel(cell.date)}</strong>
+                          <For each={entries()}>
+                            {(entry) => (
+                              <span
+                                class="report-calendar-entry"
+                                classList={{
+                                  "is-scheduled": entry.kind === "scheduled",
+                                  "is-overdue": entry.overdue,
+                                }}
+                              >
+                                <span>
+                                  {entry.label}
+                                  <Show when={entry.kind === "scheduled"}>
+                                    <small>{entry.overdue ? " · overdue" : " · scheduled"}</small>
+                                  </Show>
+                                </span>
+                                <span>{amount(entry, (cents) => fmt().formatCents(cents))}</span>
+                              </span>
+                            )}
+                          </For>
+                          <small class="report-calendar-popover-hint">Click for details</small>
                         </span>
                       </Show>
                     </button>

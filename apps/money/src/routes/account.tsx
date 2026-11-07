@@ -275,11 +275,7 @@ export default function AccountPage() {
               Activity
             </button>
           </div>
-          <details class="activity-advanced">
-            <summary>
-              <MoneyIcon name="settings" size={16} />
-              Filters
-            </summary>
+          <div class="activity-panel-filters">
             <TransactionFilters
               accountId={params.id}
               activeConditions={filterConditions()}
@@ -290,7 +286,7 @@ export default function AccountPage() {
                 setFilterId(id);
               }}
             />
-          </details>
+          </div>
         </Show>
         <Show
           when={rows().length}

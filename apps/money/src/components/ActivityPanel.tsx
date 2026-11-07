@@ -20,6 +20,8 @@ import MoneyIcon from "./MoneyIcon";
 import { dispatch, requireCommandId } from "../lib/pending-ops";
 import { api } from "../lib/api";
 import { listenForMoneyDataChanged } from "../lib/data-events";
+import { calendarEntries } from "../lib/report-calendar";
+import { formatCalendarDate } from "../domain/types";
 import type { TransactionRow } from "./TransactionTable";
 import type { Condition } from "./TransactionFilters";
 import type {
@@ -178,6 +180,9 @@ export default function ActivityPanel(props: {
 
   const selected = createMemo(() => transactions().find((row) => row.id === searchParams.focus));
   const scheduled = useScheduledPayments(() => (layout() === "calendar" ? props.month : null));
+  const calendarEntryMap = createMemo(() =>
+    calendarEntries(visibleTransactions(), scheduled.byDay(), formatCalendarDate(new Date())),
+  );
   const calendarDays = createMemo(() =>
     dailyActivityTotals(visibleTransactions(), Boolean(searchParams.category)),
   );
@@ -313,6 +318,11 @@ export default function ActivityPanel(props: {
       </div>
 
       <div class="activity-panel-filters">
+        <TransactionFilters
+          activeConditions={filterConditions()}
+          activeConditionsOp={filterConditionsOp()}
+          onConditionsChange={handleFilterChange}
+        />
         <Show when={searchParams.account}>
           <div class="active-view-chip">
             {accounts().find((account) => account.id === searchParams.account)?.name ?? "Account"}
@@ -347,20 +357,6 @@ export default function ActivityPanel(props: {
             <span class="money-in">+{fmt().formatCents(totals().income)} in</span>
           </Show>
         </span>
-        <details class="activity-advanced">
-          <summary>
-            <MoneyIcon name="settings" size={15} />
-            Filters
-            <Show when={filterConditions().length}>
-              <span>({filterConditions().length})</span>
-            </Show>
-          </summary>
-          <TransactionFilters
-            activeConditions={filterConditions()}
-            activeConditionsOp={filterConditionsOp()}
-            onConditionsChange={handleFilterChange}
-          />
-        </details>
       </div>
 
       <PageState
@@ -420,6 +416,7 @@ export default function ActivityPanel(props: {
                 selectedDay={calendarDay()}
                 onSelectDay={setSelectedDay}
                 scheduledMark={scheduled.mark}
+                entries={(date) => calendarEntryMap().get(date) ?? []}
                 detail={(day) => {
                   const rows = () => visibleTransactions().filter((row) => row.date === day.date);
                   const due = () => scheduled.byDay().get(day.date) ?? [];
